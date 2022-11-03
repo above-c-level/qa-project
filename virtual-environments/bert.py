@@ -11,4 +11,4 @@ text = "I'm excited to use bert for my project"
 # encode and pass through the BERT
 encoded_input = tokenizer(text, return_tensors='pt')
 output = model(**encoded_input)
-print("output=",output)
+print("output=", output)
