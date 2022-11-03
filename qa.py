@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
 
 # foreach question in questions:
-#    Find the answer()
+#    FindTheAnswer() || AnswerQuestions()
 #    Print QuestionID to console
 #    Print Question to console
 #    Print Answer to console
