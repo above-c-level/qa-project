@@ -74,22 +74,21 @@ def read_story(directory: str, story_id: str) -> Dict[str, str]:
         A dictionary of key value pairs.
     """
     file_path = os.path.join(directory, story_id)
-    story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<headline>(?:.|\n)*)DATE\:"
-                          r"(?:\s+)?(?P<date>(?:.|\n)*)STORYID\:(?:\s+)?"
-                          r"(?P<storyid>(?:.|\n)*)TEXT\:(?:\s+)?(?P<text>(?:.|\n)*)")
+    story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<HEADLINE>(?:.|\n)*)"
+                          r"DATE\:(?:\s+)?(?P<DATE>(?:.|\n)*)"
+                          r"STORYID\:(?:\s+)?(?P<STORYID>(?:.|\n)*)"
+                          r"TEXT\:(?:\s+)?(?P<TEXT>(?:.|\n)*)")
+    read_data = ""
     with open(file_path, "r") as f:
-        lines = f.readlines()
+        read_data = f.read()
 
-    story = {"HEADLINE": lines[0].split(":")[1].strip()}
-    story["DATE"] = lines[1].split(":")[1].strip()
-    story["STORYID"] = lines[2].split(":")[1].strip()
-    # Every single line after TEXT is part of the story
-    for line in lines[5:]:
-        story["TEXT"] = story.get("TEXT", "") + line
-    story["TEXT"] = story["TEXT"].strip()
-    # Remove multiple whitespace and replace with single space
-    story["TEXT"] = re.sub(r"\s+", " ", story["TEXT"])
-    return story
+    match = story_re.match(read_data)
+    if not match:
+        raise ValueError("Invalid story file format.")
+    groupdict = match.groupdict()
+    for key, value in match.groupdict().items():
+        groupdict[key] = value.strip()
+    return groupdict
 
 
 def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
@@ -108,54 +107,76 @@ def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
     List[Dict[str, str]]
         A list of question saved in a dictionary of key value pairs.
     """
+
     file_path = os.path.join(directory, story_id)
+    read_data = ""
     with open(file_path, "r") as f:
-        lines = f.readlines()
-        
-def find_answer(question:str,story: Dict[str, str]) -> str:
+        read_data = f.read()
+
+    questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
+                              r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
+                              r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
+    question_groups = read_data.split("\n\n")
+    question_dicts = []
+    for group in question_groups:
+        group = group.strip()
+        match = questions_re.match(group)
+        if not match:
+            continue
+        groupdict = match.groupdict()
+        for key, value in match.groupdict().items():
+            groupdict[key] = value.strip()
+        question_dicts.append(groupdict)
+    return question_dicts
+
+
+def find_answer(question: str, story: Dict[str, str]) -> str:
     """
-    Compare the question with the story, and return the best answer.  
+    Compare the question with the story, and return the best answer.
 
     Parameters
     ----------
     story : Dict[str,str]
         The saved story.
     questions : str
-        The current Question being asked. 
+        The current Question being asked.
 
     Returns
     -------
     str
         The best response to the given question.
     """
-    pass
+    answer = "every answer is correct?"
+    return answer
+
 
 def answer_questions(story: Dict[str, str],
                      questions: List[Dict[str, str]]) -> None:
     """
-    Answers the questions receieved from the questions list with the 
+    Answers the questions receieved from the questions list with the
     information saved in the story.
 
     Parameters
     ----------
     story : Dict[str,str]
-        The saved story.
+        The story dictionary.
     questions : List[Dict[str,str]]
-        The list of questions.
+        The list of question dictionaries.
     """
-    for question in questions:
-        # get and print question ID. 
-        question_id = question.get("QuestionID")
-        question_text = question.get("Question")
-        difficulty = question.get("Difficulty")
-        
-        print("QuestionID: " + question_id)
-        print("Question: " + question_text) 
+    for question_dict in questions:
+        # get and print question ID.
+        question_id = question_dict["QuestionID"]
+
+        print(f"QuestionID: {question_id}")
+        question_text = question_dict["Question"]
+        print(f"Question: {question_text}")
         # get question and run it through our answerFinder with story.
-        answer = find_answer(question,story)
-        print("Answer: ") 
-        # print the answer. 
-        print("Difficulty: " + difficulty) 
+        answer = find_answer(question_text, story)
+        print(f"Answer: {answer}")
+        # print the answer.
+        difficulty = question_dict["Difficulty"]
+        print(f"Difficulty: {difficulty}")
+
 
 if __name__ == "__main__":
     inputfile = parse_args()
@@ -169,15 +190,8 @@ if __name__ == "__main__":
         try:
             story = read_story(directory, story_id)
             questions = read_questions(directory, story_id)
-            answer_questions(story,questions)
+            answer_questions(story, questions)
         except FileNotFoundError:
             print(f"Could not find story {story_id}")
             continue
         print(story["STORYID"])
-
-
-# foreach question in questions:
-#    FindTheAnswer() || answer_questions()
-#    Print QuestionID to console
-#    Print Question to console
-#    Print Answer to console
