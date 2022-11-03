@@ -1,7 +1,9 @@
 #! /usr/bin/env python3
 import argparse
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 from terminalhelper import stringformat, VERBATIM, NEWLINE
+import os
+import re
 
 
 def parse_args():
@@ -42,9 +44,9 @@ number of lines of text. For example:
 A group of 50 beluga whales is fighting to stay alive in an icy trap in the
 Canadian Arctic near Ellesmere Island.
 {NEWLINE}
-{NEWLINE}{VERBATIM}An unexpected freeze has left dozens of the whales trapped in a sea of ice,
-with one small hole as their only window for air. The open sea is 20 kilometres
-away.
+{NEWLINE}{VERBATIM}An unexpected freeze has left dozens of the whales trapped
+in a sea of ice, with one small hole as their only window for air. The open sea
+is 20 kilometres away.
 {NEWLINE}etc.
 '''),
         metavar="<inputfile>",
@@ -55,6 +57,57 @@ away.
     return inputfile
 
 
+def read_story(directory: str, story_id: str) -> Dict[str, str]:
+    """
+    Read a story file and return a dictionary of key value pairs.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story file.
+    story_id : str
+        The story ID.
+
+    Returns
+    -------
+    Dict[str, str]
+        A dictionary of key value pairs.
+    """
+    file_path = os.path.join(directory, story_id)
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    story = {"HEADLINE": lines[0].split(":")[1].strip()}
+    story["DATE"] = lines[1].split(":")[1].strip()
+    story["STORYID"] = lines[2].split(":")[1].strip()
+    # Every single line after TEXT is part of the story
+    for line in lines[5:]:
+        story["TEXT"] = story.get("TEXT", "") + line
+    story["TEXT"] = story["TEXT"].strip()
+    # Remove multiple whitespace and replace with single space
+    story["TEXT"] = re.sub(r"\s+", " ", story["TEXT"])
+    return story
+
+
 if __name__ == "__main__":
     inputfile = parse_args()
-    print(inputfile)
+    with open(inputfile, "r") as f:
+        lines = f.readlines()
+        directory = lines[0].strip()
+        lines = lines[1:]
+    for line in lines:
+        story_id = line.strip()
+        story_id += ".story"
+        try:
+            story = read_story(directory, story_id)
+        except FileNotFoundError:
+            print(f"Could not find story {story_id}")
+            continue
+        print(story["STORYID"])
+
+
+# foreach question in questions:
+#    Find the answer()
+#    Print QuestionID to console
+#    Print Question to console
+#    Print Answer to console

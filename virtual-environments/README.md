@@ -7,7 +7,7 @@ $ python3 -m venv cs5340-env
 ```
 
 This will create a new directory called `cs5340-env` which contains your new environment.
-Now we can install any python libraries and dependencies we want to use for our project into that environment. But first you need to tell our shell that we want to use this new environment instead of the default python installation. This is called 'activating' the venv. We activate the environment with the command 
+Now we can install any python libraries and dependencies we want to use for our project into that environment. But first you need to tell our shell that we want to use this new environment instead of the default python installation. This is called 'activating' the venv. We activate the environment with the command
 
 ```
 $ source cs5340-env/bin/activate
@@ -61,14 +61,14 @@ This is an extra section to show you how to use a virtual environment to load th
 
 NOTE: You are by no means required to use the language model at all. This is just to help those who would like to try it.
 
-## Installing torch and transformers 
+## Installing torch and transformers
 We will loaded the pre-trained bert model using a popular library called HuggingFace Transformers. First you'll need to install this library into a python virtual environment.
-The commands below will install specific versions of transformers and a library for working with tensors called torch. Make sure your venv is activated and then install the requirements. 
+The commands below will install specific versions of transformers and a library for working with tensors called torch. Make sure your venv is activated and then install the requirements.
 
 ```
 $ source cs5340-env/bin/activate
 $ pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
-$ pip install transformers==4.7
+$ 
 ```
 
 Now you should be ready to go!
