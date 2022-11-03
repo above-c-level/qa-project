@@ -74,6 +74,9 @@ def read_story(directory: str, story_id: str) -> Dict[str, str]:
         A dictionary of key value pairs.
     """
     file_path = os.path.join(directory, story_id)
+    story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<headline>(?:.|\n)*)DATE\:"
+                          r"(?:\s+)?(?P<date>(?:.|\n)*)STORYID\:(?:\s+)?"
+                          r"(?P<storyid>(?:.|\n)*)TEXT\:(?:\s+)?(?P<text>(?:.|\n)*)")
     with open(file_path, "r") as f:
         lines = f.readlines()
 
@@ -89,6 +92,71 @@ def read_story(directory: str, story_id: str) -> Dict[str, str]:
     return story
 
 
+def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
+    """
+    Read a question file and return a list of dictionaries of key value pairs.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story file.
+    story_id : str
+        The story ID.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of question saved in a dictionary of key value pairs.
+    """
+    file_path = os.path.join(directory, story_id)
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        
+def find_answer(question:str,story: Dict[str, str]) -> str:
+    """
+    Compare the question with the story, and return the best answer.  
+
+    Parameters
+    ----------
+    story : Dict[str,str]
+        The saved story.
+    questions : str
+        The current Question being asked. 
+
+    Returns
+    -------
+    str
+        The best response to the given question.
+    """
+    pass
+
+def answer_questions(story: Dict[str, str],
+                     questions: List[Dict[str, str]]) -> None:
+    """
+    Answers the questions receieved from the questions list with the 
+    information saved in the story.
+
+    Parameters
+    ----------
+    story : Dict[str,str]
+        The saved story.
+    questions : List[Dict[str,str]]
+        The list of questions.
+    """
+    for question in questions:
+        # get and print question ID. 
+        question_id = question.get("QuestionID")
+        question_text = question.get("Question")
+        difficulty = question.get("Difficulty")
+        
+        print("QuestionID: " + question_id)
+        print("Question: " + question_text) 
+        # get question and run it through our answerFinder with story.
+        answer = find_answer(question,story)
+        print("Answer: ") 
+        # print the answer. 
+        print("Difficulty: " + difficulty) 
+
 if __name__ == "__main__":
     inputfile = parse_args()
     with open(inputfile, "r") as f:
@@ -100,6 +168,8 @@ if __name__ == "__main__":
         story_id += ".story"
         try:
             story = read_story(directory, story_id)
+            questions = read_questions(directory, story_id)
+            answer_questions(story,questions)
         except FileNotFoundError:
             print(f"Could not find story {story_id}")
             continue
@@ -107,7 +177,7 @@ if __name__ == "__main__":
 
 
 # foreach question in questions:
-#    FindTheAnswer() || AnswerQuestions()
+#    FindTheAnswer() || answer_questions()
 #    Print QuestionID to console
 #    Print Question to console
 #    Print Answer to console
