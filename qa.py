@@ -74,6 +74,7 @@ def read_story(directory: str, story_id: str) -> Dict[str, str]:
         A dictionary of key value pairs.
     """
     file_path = os.path.join(directory, story_id)
+    file_path += ".story"
     story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<HEADLINE>(?:.|\n)*)"
                           r"DATE\:(?:\s+)?(?P<DATE>(?:.|\n)*)"
                           r"STORYID\:(?:\s+)?(?P<STORYID>(?:.|\n)*)"
@@ -86,8 +87,11 @@ def read_story(directory: str, story_id: str) -> Dict[str, str]:
     if not match:
         raise ValueError("Invalid story file format.")
     groupdict = match.groupdict()
+    space_re = re.compile(r"(\n|\s)+")
     for key, value in match.groupdict().items():
         groupdict[key] = value.strip()
+        # Remove extra spaces
+        groupdict[key] = space_re.sub(" ", groupdict[key])
     return groupdict
 
 
@@ -107,8 +111,10 @@ def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
     List[Dict[str, str]]
         A list of question saved in a dictionary of key value pairs.
     """
-
+    # Construct the path to the question file
     file_path = os.path.join(directory, story_id)
+    file_path += ".questions"
+    # Read the file
     read_data = ""
     with open(file_path, "r") as f:
         read_data = f.read()
@@ -116,16 +122,20 @@ def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
     questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
                               r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
                               r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
+    # Questions are separated by double newline
     question_groups = read_data.split("\n\n")
     question_dicts = []
     for group in question_groups:
+        # Match questions as well as the question ID and difficulty
         group = group.strip()
         match = questions_re.match(group)
         if not match:
             continue
         groupdict = match.groupdict()
         for key, value in match.groupdict().items():
+            # Clean up leading and trailing whitespace
             groupdict[key] = value.strip()
+        # Add question info to the list
         question_dicts.append(groupdict)
     return question_dicts
 
@@ -136,10 +146,10 @@ def find_answer(question: str, story: Dict[str, str]) -> str:
 
     Parameters
     ----------
-    story : Dict[str,str]
+    question : str
+        The current question being asked.
+    story : Dict[str, str]
         The saved story.
-    questions : str
-        The current Question being asked.
 
     Returns
     -------
@@ -164,16 +174,16 @@ def answer_questions(story: Dict[str, str],
         The list of question dictionaries.
     """
     for question_dict in questions:
-        # get and print question ID.
+        # Get and print question ID
         question_id = question_dict["QuestionID"]
-
         print(f"QuestionID: {question_id}")
+        # Print the question itself
         question_text = question_dict["Question"]
         print(f"Question: {question_text}")
-        # get question and run it through our answerFinder with story.
+        # Get question and run it through our answer function with the story
         answer = find_answer(question_text, story)
+        # Print the answer
         print(f"Answer: {answer}")
-        # print the answer.
         difficulty = question_dict["Difficulty"]
         print(f"Difficulty: {difficulty}")
 
@@ -186,7 +196,6 @@ if __name__ == "__main__":
         lines = lines[1:]
     for line in lines:
         story_id = line.strip()
-        story_id += ".story"
         try:
             story = read_story(directory, story_id)
             questions = read_questions(directory, story_id)
