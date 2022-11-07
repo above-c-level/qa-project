@@ -4,7 +4,7 @@ import os
 import re
 from typing import Dict, List, Set, Tuple
 
-from helpers import read_questions, read_story
+from helpers import read_questions, read_story, StoryHelper
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 
 
@@ -75,9 +75,11 @@ def find_answer(question: str, story: Dict[str, str]) -> str:
     str
         The best response to the given question.
     """
-    answer = "every answer is correct?"
-    return answer
-
+    story_text = story["TEXT"]
+    story_help = StoryHelper(story_text)
+    prediction = story_help.most_similar_signature(question)
+    
+    return prediction
 
 def answer_questions(story: Dict[str, str],
                      questions: List[Dict[str, str]]) -> None:
