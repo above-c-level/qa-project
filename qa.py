@@ -1,9 +1,11 @@
 #! /usr/bin/env python3
 import argparse
-from typing import Dict, List, Set, Tuple
-from terminalhelper import stringformat, VERBATIM, NEWLINE
 import os
 import re
+from typing import Dict, List, Set, Tuple
+
+from helpers import read_questions, read_story
+from terminalhelper import NEWLINE, VERBATIM, stringformat
 
 
 def parse_args():
@@ -55,89 +57,6 @@ is 20 kilometres away.
     args = parser.parse_args()
     inputfile = args.inputfile[0]
     return inputfile
-
-
-def read_story(directory: str, story_id: str) -> Dict[str, str]:
-    """
-    Read a story file and return a dictionary of key value pairs.
-
-    Parameters
-    ----------
-    directory : str
-        The directory path to the story file.
-    story_id : str
-        The story ID.
-
-    Returns
-    -------
-    Dict[str, str]
-        A dictionary of key value pairs.
-    """
-    file_path = os.path.join(directory, story_id)
-    file_path += ".story"
-    story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<HEADLINE>(?:.|\n)*)"
-                          r"DATE\:(?:\s+)?(?P<DATE>(?:.|\n)*)"
-                          r"STORYID\:(?:\s+)?(?P<STORYID>(?:.|\n)*)"
-                          r"TEXT\:(?:\s+)?(?P<TEXT>(?:.|\n)*)")
-    read_data = ""
-    with open(file_path, "r") as f:
-        read_data = f.read()
-
-    match = story_re.match(read_data)
-    if not match:
-        raise ValueError("Invalid story file format.")
-    groupdict = match.groupdict()
-    space_re = re.compile(r"(\n|\s)+")
-    for key, value in match.groupdict().items():
-        groupdict[key] = value.strip()
-        # Remove extra spaces
-        groupdict[key] = space_re.sub(" ", groupdict[key])
-    return groupdict
-
-
-def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
-    """
-    Read a question file and return a list of dictionaries of key value pairs.
-
-    Parameters
-    ----------
-    directory : str
-        The directory path to the story file.
-    story_id : str
-        The story ID.
-
-    Returns
-    -------
-    List[Dict[str, str]]
-        A list of question saved in a dictionary of key value pairs.
-    """
-    # Construct the path to the question file
-    file_path = os.path.join(directory, story_id)
-    file_path += ".questions"
-    # Read the file
-    read_data = ""
-    with open(file_path, "r") as f:
-        read_data = f.read()
-
-    questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
-                              r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
-                              r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
-    # Questions are separated by double newline
-    question_groups = read_data.split("\n\n")
-    question_dicts = []
-    for group in question_groups:
-        # Match questions as well as the question ID and difficulty
-        group = group.strip()
-        match = questions_re.match(group)
-        if not match:
-            continue
-        groupdict = match.groupdict()
-        for key, value in match.groupdict().items():
-            # Clean up leading and trailing whitespace
-            groupdict[key] = value.strip()
-        # Add question info to the list
-        question_dicts.append(groupdict)
-    return question_dicts
 
 
 def find_answer(question: str, story: Dict[str, str]) -> str:

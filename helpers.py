@@ -1,11 +1,20 @@
+import os
+import random
+import re
 from collections import defaultdict
-from typing import List
-from transformers import AutoTokenizer, AutoModel
-import torch
+from typing import Dict, List, Set, Tuple
+
 import numpy as np
 import numpy.linalg as la
-from numpy.typing import ArrayLike
 import spacy
+import torch
+from numpy.typing import ArrayLike
+from sklearn.model_selection import train_test_split
+from transformers import AutoModel, AutoTokenizer
+
+from helpers import Bert, StoryHelper
+from qa import find_answer
+from terminalhelper import NEWLINE, VERBATIM, stringformat
 
 
 def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
@@ -210,3 +219,133 @@ class StoryHelper:
                 best_sentence = story_sentence
         # Return the most similar sentence
         return best_sentence.strip()
+
+
+def read_story(directory: str, story_id: str) -> Dict[str, str]:
+    """
+    Read a story file and return a dictionary of key value pairs.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story file.
+    story_id : str
+        The story ID.
+
+    Returns
+    -------
+    Dict[str, str]
+        A dictionary of key value pairs.
+    """
+    file_path = os.path.join(directory, story_id)
+    file_path += ".story"
+    story_re = re.compile(r"HEADLINE\:(?:\s+)?(?P<HEADLINE>(?:.|\n)*)"
+                          r"DATE\:(?:\s+)?(?P<DATE>(?:.|\n)*)"
+                          r"STORYID\:(?:\s+)?(?P<STORYID>(?:.|\n)*)"
+                          r"TEXT\:(?:\s+)?(?P<TEXT>(?:.|\n)*)")
+    read_data = ""
+    with open(file_path, "r") as f:
+        read_data = f.read()
+
+    match = story_re.match(read_data)
+    if not match:
+        raise ValueError("Invalid story file format.")
+    groupdict = match.groupdict()
+    space_re = re.compile(r"(\n|\s)+")
+    for key, value in match.groupdict().items():
+        groupdict[key] = value.strip()
+        # Remove extra spaces
+        groupdict[key] = space_re.sub(" ", groupdict[key])
+    return groupdict
+
+
+def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
+    """
+    Read a question file and return a list of dictionaries of key value pairs.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story file.
+    story_id : str
+        The story ID.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of question saved in a dictionary of key value pairs.
+    """
+    # Construct the path to the question file
+    file_path = os.path.join(directory, story_id)
+    file_path += ".questions"
+    # Read the file
+    read_data = ""
+    with open(file_path, "r") as f:
+        read_data = f.read()
+
+    questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
+                              r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
+                              r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
+    # Questions are separated by double newline
+    question_groups = read_data.split("\n\n")
+    question_dicts = []
+    for group in question_groups:
+        # Match questions as well as the question ID and difficulty
+        group = group.strip()
+        match = questions_re.match(group)
+        if not match:
+            continue
+        groupdict = match.groupdict()
+        for key, value in match.groupdict().items():
+            # Clean up leading and trailing whitespace
+            groupdict[key] = value.strip()
+        # Add question info to the list
+        question_dicts.append(groupdict)
+    return question_dicts
+
+
+def read_answers(directory: str, story_id: str) -> List[Dict[str, str]]:
+    """
+    Read an answer file and return a list of dictionaries of key value pairs.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story file.
+    story_id : str
+        The story ID.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of answers saved in a dictionary of key value pairs.
+    """
+    # Construct the path to the question file
+    file_path = os.path.join(directory, story_id)
+    file_path += ".answers"
+    # Read the file
+    read_data = ""
+    with open(file_path, "r") as f:
+        read_data = f.read()
+
+    questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
+                              r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
+                              r"Answer\:(?:\s+)?(?P<Answer>(?:.|\n)*)"
+                              r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
+
+    # Questions are separated by double newline
+    question_groups = read_data.split("\n\n")
+    question_dicts = []
+    for group in question_groups:
+        # Match questions as well as the question ID and difficulty
+        group = group.strip()
+        match = questions_re.match(group)
+        if not match:
+            continue
+        groupdict = match.groupdict()
+        for key, value in match.groupdict().items():
+            # Clean up leading and trailing whitespace
+            groupdict[key] = value.strip()
+        # Add question info to the list
+        question_dicts.append(groupdict)
+    return question_dicts
