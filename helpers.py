@@ -349,3 +349,81 @@ def read_answers(directory: str, story_id: str) -> List[Dict[str, str]]:
         # Add question info to the list
         question_dicts.append(groupdict)
     return question_dicts
+
+
+def text_f_score(answer: str, prediction: str) -> float:
+    """
+    Returns the f measure of a prediction compared with the answer
+
+    Parameters
+    ----------
+    answer : str
+        The ground truth answer
+    prediction : str
+        The predicted answer
+
+    Returns
+    -------
+    float
+        The f measure
+    """
+    prediction = prediction.strip()
+    # Unlike predictions, answers can have multiple valid answers
+    # Split the answer into a list of answers about the pipe character (|)
+    answers = [valid.strip() for valid in answer.split("|")]
+    best_f_score = -float('inf')
+    prediction_words = prediction.split()
+    for valid in answers:
+        # Recall is the number of correct words divided by the number of words
+        # in the answer
+        valid_words = valid.split()
+        # Number of correct words in prediction
+        correct_words = sum(word in valid_words for word in prediction_words)
+        recall = correct_words / len(valid_words)
+        # Precision is the number of correct words divided by the number of
+        # words in the prediction
+        precision = correct_words / len(prediction_words)
+        # f measure is the harmonic mean of precision and recall
+        if recall == 0 and precision == 0:
+            f_measure = 0
+        else:
+            f_measure = 2 * (precision * recall) / (precision + recall)
+        if f_measure > best_f_score:
+            best_f_score = f_measure
+    # Return the best f measure given the prediction since there can be multiple
+    # valid answers
+    return best_f_score
+
+
+def get_story_question_answers(
+        directory: str) -> List[Tuple[Dict[str, str], List[Tuple[str, str]]]]:
+    """
+    Get the story, question, and answer for each story in a directory.
+
+    Parameters
+    ----------
+    directory : str
+        The directory path to the story files.
+
+    Returns
+    -------
+    List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+        A list of tuples of story, question, and answer.
+    """
+    # First, we need to find all the files in the directory that end with .story
+    files = []
+    for file in os.listdir(directory):
+        if not file.endswith(".story"):
+            continue
+        # Strip the file extension
+        file = os.path.splitext(file)[0]
+        files.append(file)
+    story_qas = []
+    for file in files:
+        story = read_story(directory, file)
+        answers = read_answers(directory, file)
+        question_answer_pairs = [(group["Question"], group["Answer"])
+                                 for group in answers]
+
+        story_qas.append((story, question_answer_pairs))
+    return story_qas
