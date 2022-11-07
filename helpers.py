@@ -85,25 +85,28 @@ class Bert:
         # return torch.ravel(torch.mean(embedding, dim=1)).detach().numpy()
 
 
-class StoryHelper:
+class Story:
     """
     A class to help out with some important functions in answering questions
     about a story, such as separating the story into sentences and vectorizing
     individual sentences.
     """
 
-    def __init__(self, story_text: str):
+    def __init__(self, story: Dict[str, str]):
         # sourcery skip: set-comprehension
         """
         Parameters
         ----------
-        story_text : str
-            The text of the story.
+        story_text : Dict[str, str]
+            The information about the story.
         """
-        self._story_text = story_text
+        assert "TEXT" in story
+        assert "STORYID" in story
+        self.story_text = story["TEXT"]
+        self.story_id = story["STORYID"]
         # Count each word in the story
         self._nlp = spacy.load("en_core_web_sm")
-        self._doc = self._nlp(story_text)
+        self._doc = self._nlp(self.story_text)
         words = set()
         for token in self._doc:
             if token.is_stop or not token.is_alpha:

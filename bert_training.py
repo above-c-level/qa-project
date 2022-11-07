@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 
-from helpers import Bert, StoryHelper, get_story_question_answers
+from helpers import Bert, Story, get_story_question_answers
 
 bert = Bert()
 tokenizer = bert.tokenizer
@@ -27,8 +27,8 @@ def get_training_data(
     # of tokens that answer the question
     for story, question_answer_pairs in story_qas:
         # Get the story text
-        story_text = story["TEXT"]
-        story_help = StoryHelper(story_text)
+        story_help = Story(story)
+        story_text = story_help.story_text
 
         for question, answer in question_answer_pairs:
             # If the length of the story text is greater than 512-len(question),
