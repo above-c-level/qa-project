@@ -4,3 +4,4 @@ model.pt
 cache
 */launch.json
 ml_checkpoints
+.vscode
