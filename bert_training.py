@@ -7,7 +7,8 @@ import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 
-from helpers import Bert, Story, get_story_question_answers
+from helpers import (Bert, Story, cosine_similarity,
+                     get_story_question_answers)
 
 bert = Bert()
 tokenizer = bert.tokenizer
@@ -16,6 +17,15 @@ tokenizer = bert.tokenizer
 sep_token_id = tokenizer.sep_token_id
 assert sep_token_id is not None
 story_qas = get_story_question_answers('devset-official')
+
+
+# Mostly just for debugging purposes
+def token(ids_to_tokenize):
+    return ' '.join(tokenizer.convert_ids_to_tokens(ids_to_tokenize))
+
+
+def nprep(tensor):
+    return tensor.cpu().detach().numpy()
 
 
 def get_training_data(
@@ -29,25 +39,55 @@ def get_training_data(
         # Get the story text
         story_help = Story(story)
         story_text = story_help.story_text
-
         for question, answer in question_answer_pairs:
-            # If the length of the story text is greater than 512-len(question),
-            # we'll split the story up into three parts (first half, last half,
-            # middle 50%). The answer is the same for all three parts
             parts = []
-            if len(story_text) > 512 - len(question):
-                # Split the story into three parts by sentence boundaries
-                sentences = story_help.sentences
-                first_half = " ".join(sentences[:len(sentences) // 2])
-                last_half = " ".join(sentences[len(sentences) // 2:])
-                middle = " ".join(sentences[len(sentences) // 4:3 *
-                                            len(sentences) // 4])
-                parts.extend((tokenizer.encode(question, first_half),
-                              tokenizer.encode(question, middle),
-                              tokenizer.encode(question, last_half)))
-            else:
-                encoded = tokenizer.encode(question, story_text)
+            encoded = tokenizer.encode(question, story_text)
+            if len(encoded) <= 512:
                 parts.append(encoded)
+            else:
+                question_tokens = tokenizer.encode(question)
+                # Split the story into two or more parts, trying to keep as
+                # much of the story included as possible
+                sentences = story_help.sentences
+                first_half = ""
+                for sentence in sentences:
+                    first_half_tokens = tokenizer.encode(first_half)
+                    sentence_tokens = tokenizer.encode(sentence)
+                    if len(first_half_tokens) + len(question_tokens) + len(
+                            sentence_tokens) < 512:
+                        # If the sentence still fits, we'll add it to the first
+                        # half
+                        first_half += sentence
+                    else:
+                        break
+                # Also do the last half of the story
+                last_half = ""
+                for sentence in reversed(sentences):
+                    last_half_tokens = tokenizer.encode(last_half)
+                    sentence_tokens = tokenizer.encode(sentence)
+                    if len(last_half_tokens) + len(question_tokens) + len(
+                            sentence_tokens) < 512:
+                        # If the sentence still fits, we'll add it to the last
+                        # half
+                        last_half = sentence + last_half
+                    else:
+                        break
+                first_half_tokens = tokenizer.encode(question, first_half)
+                last_half_tokens = tokenizer.encode(question, last_half)
+
+                # if len(first_half_tokens) > 512:
+                #     print(f"Length tokens: {len(first_half_tokens)}")
+                #     print(f"Question: {question}")
+                #     print(f"Question length: {len(question_tokens)}")
+                #     print(f"Tokens: {token(first_half_tokens)}")
+                # if len(last_half_tokens) > 512:
+                #     print(f"Length tokens: {len(last_half_tokens)}")
+                #     print(f"Question: {question}")
+                #     print(f"Question length: {len(question_tokens)}")
+                #     print(f"Tokens: {token(last_half_tokens)}")
+                parts = [first_half_tokens, last_half_tokens]
+                # TODO: Possibly add middle half later
+
             for input_ids in parts:
                 sep_index = input_ids.index(sep_token_id)
                 # The length of the question and story
@@ -74,12 +114,26 @@ training_info = get_training_data(story_qas)
 
 model = bert.model
 # Add another couple layers on top of the model so we can fine-tune it
-model.add_module("qa_head", torch.nn.Linear(768, 2))
-# Only train the qa_head layer
-model.qa_head.train()
+model.add_module("qa_start", torch.nn.Linear(768, 768))
+model.add_module("qa_end", torch.nn.Linear(768, 768))
+model.add_module(
+    "qa_transformer_start",
+    torch.nn.Transformer(
+        d_model=512,
+        nhead=8,
+        num_encoder_layers=3,
+        num_decoder_layers=3,
+        dim_feedforward=768,
+        dropout=0.1,
+        activation="relu",
+    ),
+)
+# Only train the question answering head
+model.qa_start.train()
+model.qa_end.train()
 
 # Adam tends to be a pretty solid optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=0.03)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -92,13 +146,11 @@ training_info, validation_info = train_test_split(training_info,
                                                   shuffle=True)
 
 
-# Mostly just for debugging purposes
-def token(ids_to_tokenize):
-    return ' '.join(tokenizer.convert_ids_to_tokens(ids_to_tokenize))
-
-
 def loss(pred, true):
-    return torch.nn.functional.binary_cross_entropy_with_logits(pred, true)
+    # return torch.nn.functional.l1_loss(pred, true)
+    # return torch.nn.functional.mse_loss(pred, true)
+    # return torch.nn.functional.huber_loss(pred, true)
+    return torch.nn.functional.smooth_l1_loss(pred, true)
 
 
 epochs = 10
@@ -120,7 +172,6 @@ for epoch in range(epochs):
         if len(input_ids) > 512:
             print("Skipping")
             continue
-        items += 1
         # Strip out the [CLS] and [SEP] tokens from the answer
         answer_ids = answer_ids[1:-1]
         # For debugging purposes
@@ -140,42 +191,34 @@ for epoch in range(epochs):
         # If we didn't find the answer, skip this example
         if start_index is None or end_index is None:
             continue
+        items += 1
         # Convert the input to tensors
         input_ids_tensor = torch.tensor(input_ids).unsqueeze(0)
         token_type_ids_tensor = torch.tensor(token_type_ids).unsqueeze(0)
         # Get the output from the model
         pred = model(input_ids_tensor.to(device),
                      token_type_ids=token_type_ids_tensor.to(device))
-        # The logits of the predictions for the start and end tokens
-        start_logits_pred = pred[0].squeeze(0)
-        end_logits_pred = pred[1].squeeze(0)
-        # Probabilities of the predictions for the start and end tokens
-        start_probs_pred = torch.nn.functional.softmax(start_logits_pred,
-                                                       dim=0)
-        end_probs_pred = torch.nn.functional.softmax(end_logits_pred, dim=0)
-        # The shape of the start and end logits is [x, 768], where x is the
-        # number of tokens in the input. But the start and end indices are
-        # just scalars, so we need to expand them to [x, 768] so we can
-        # calculate the loss
-        start_index_tensor = torch.tensor(start_index).unsqueeze(0).to(device)
-        end_index_tensor = torch.tensor(end_index).unsqueeze(0).to(device)
-        start_logits_true = torch.zeros_like(start_logits_pred).to(device)
-        end_logits_true = torch.zeros_like(end_logits_pred).to(device)
-        # If we use .scatter_(0, start_index_tensor, 1), we get an error about
-        # how the index tensor must have the same number of dimensions as the
-        # self tensor. So we need to unsqueeze the start_index_tensor and
-        # end_index_tensor
-        start_logits_true.scatter_(0, start_index_tensor.unsqueeze(0), 1)
-        end_logits_true.scatter_(0, end_index_tensor, 1)
-        # Calculate the loss
-        start_loss = loss(start_logits_pred, start_logits_true)
-        end_loss = loss(end_logits_pred, end_logits_true)
-        total_loss = start_loss + end_loss
+        last_hidden_state = pred[0]
+        pooler_output = pred[1]
+        # Get the start and end outputs of qa_start and qa_end on the
+        # pooler output
+        start_pred = model.qa_start(pooler_output).squeeze(0)
+        end_pred = model.qa_end(pooler_output).squeeze(0)
+        ground_truth_start = last_hidden_state.squeeze(0)[start_index]
+        ground_truth_end = last_hidden_state.squeeze(0)[end_index]
+        # Get the start and end loss
+        start_loss = loss(start_pred, ground_truth_start)
+        end_loss = loss(end_pred, ground_truth_end)
 
-        # Backpropagate
-        total_loss.backward()
+        # Backpropagate the loss for start_pred and end_pred
+        start_loss.backward(retain_graph=True)
+        optimizer.zero_grad()
+
+        end_loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+
+        total_loss = start_loss + end_loss
         # Keep track of the loss
         epoch_loss += total_loss.item()
     print(f"\rLoss: {epoch_loss / items}")
@@ -184,18 +227,9 @@ for epoch in range(epochs):
     items = 1
     for input_ids, token_type_ids, answer_ids in training_info:
         print(f"Loss: {validation_loss / items}", end="\r")
-        # We can't accept anything longer than 512 tokens, so we need to
-        # truncate the story (for now, later we can iterate over the story
-        # if it's too long)
-        if len(input_ids) > 512:
-            print("Skipping")
-            continue
-        items += 1
+
         # Strip out the [CLS] and [SEP] tokens from the answer
         answer_ids = answer_ids[1:-1]
-        # For debugging purposes
-        input_tokens = token(input_ids)
-        answer_tokens = token(answer_ids)
         # Get the start and end indices of the answer
         # Since the first word could hypothetically show up multiple times in
         # the story, we need to find all instances of it and then find the
@@ -210,40 +244,56 @@ for epoch in range(epochs):
         # If we didn't find the answer, skip this example
         if start_index is None or end_index is None:
             continue
+        items += 1
         # Convert the input to tensors
         input_ids_tensor = torch.tensor(input_ids).unsqueeze(0)
         token_type_ids_tensor = torch.tensor(token_type_ids).unsqueeze(0)
         # Get the output from the model
-        if torch.cuda.is_available():
-            pred = model(input_ids_tensor.cuda(),
-                         token_type_ids=token_type_ids_tensor.cuda())
-        else:
-            pred = model(input_ids_tensor,
-                         token_type_ids=token_type_ids_tensor)
-        # The logits of the predictions for the start and end tokens
-        start_logits_pred = pred[0].squeeze(0)
-        end_logits_pred = pred[1].squeeze(0)
-        # Probabilities of the predictions for the start and end tokens
-        start_probs_pred = torch.nn.functional.softmax(start_logits_pred,
-                                                       dim=0)
-        end_probs_pred = torch.nn.functional.softmax(end_logits_pred, dim=0)
-        # The shape of the start and end logits is [x, 768], where x is the
-        # number of tokens in the input. But the start and end indices are
-        # just scalars, so we need to expand them to [x, 768] so we can
-        # calculate the loss
-        start_index_tensor = torch.tensor(start_index).unsqueeze(0).to(device)
-        end_index_tensor = torch.tensor(end_index).unsqueeze(0).to(device)
-        start_logits_true = torch.zeros_like(start_logits_pred).to(device)
-        end_logits_true = torch.zeros_like(end_logits_pred).to(device)
-        # If we use .scatter_(0, start_index_tensor, 1), we get an error about
-        # how the index tensor must have the same number of dimensions as the
-        # self tensor. So we need to unsqueeze the start_index_tensor and
-        # end_index_tensor
-        start_logits_true.scatter_(0, start_index_tensor.unsqueeze(0), 1)
-        end_logits_true.scatter_(0, end_index_tensor, 1)
-        # Calculate the loss
-        start_loss = loss(start_logits_pred, start_logits_true)
-        end_loss = loss(end_logits_pred, end_logits_true)
+        pred = model(input_ids_tensor.to(device),
+                     token_type_ids=token_type_ids_tensor.to(device))
+        last_hidden_state = pred[0]
+        pooler_output = pred[1]
+
+        # Get the start and end outputs of qa_start and qa_end on the
+        # pooler output
+        start_pred = model.qa_start(pooler_output).squeeze(0)
+        end_pred = model.qa_end(pooler_output).squeeze(0)
+        if epoch % 9 == 0:
+            # Print out what the question was, which is the input_ids where the
+            # token type ids are 0
+            question = [
+                input_ids[i] for i in range(len(input_ids))
+                if token_type_ids[i] == 0
+            ]
+            print(f"Question: {token(question)}")
+            # Print out the observed answer
+            print(f"Observed answer: {token(answer_ids)}")
+
+            # Find the tokens in the hidden state that are most similar to the
+            # start and end predictions
+            start_pred_np = start_pred.cpu().detach().numpy()
+            end_pred_np = end_pred.cpu().detach().numpy()
+            last_hidden_state_np = last_hidden_state.squeeze(
+                0).cpu().detach().numpy()
+            start_similarities = cosine_similarity_matrix(
+                start_pred_np, last_hidden_state_np)
+            end_similarities = cosine_similarity_matrix(
+                end_pred_np, last_hidden_state_np)
+            # Get the indices of the most similar tokens
+            start_index_pred = np.argmax(start_similarities)
+            end_index_pred = np.argmax(end_similarities)
+            print(f"Start index: {start_index_pred}")
+            print(f"End index: {end_index_pred}")
+            predicted_answer = input_ids[start_index_pred:end_index_pred + 1]
+            print(f"Predicted answer: {token(predicted_answer)}")
+
+        start_pred = model.qa_start(pooler_output).squeeze(0)
+        end_pred = model.qa_end(pooler_output).squeeze(0)
+        ground_truth_start = last_hidden_state.squeeze(0)[start_index]
+        ground_truth_end = last_hidden_state.squeeze(0)[end_index]
+        # Get the start and end loss
+        start_loss = loss(start_pred, ground_truth_start)
+        end_loss = loss(end_pred, ground_truth_end)
         total_loss = start_loss + end_loss
         # Keep track of the loss
         validation_loss += total_loss.item()

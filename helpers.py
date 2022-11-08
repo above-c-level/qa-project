@@ -2,7 +2,7 @@ import os
 import random
 import re
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import numpy.linalg as la
@@ -56,11 +56,13 @@ class Bert:
         ModelLoadError
             If the model or tokenizer cannot be loaded.
         """
+        self.device = torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu')
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
         model = AutoModel.from_pretrained("bert-base-uncased",
                                           max_position_embeddings=512)
         if model is not None:
-            self.model = model
+            self.model = model.to(self.device)
         else:
             raise ModelLoadError("Unable to load pretrained BERT model")
 
@@ -79,8 +81,8 @@ class Bert:
             The embeddings for the given text as a numpy array.
         """
         encoded_input = self.tokenizer(text, return_tensors='pt')
-        embedding = self.model(**encoded_input).pooler_output
-        return torch.ravel(embedding).detach().numpy()
+        embedding = self.model(**encoded_input.to(self.device)).pooler_output
+        return torch.ravel(embedding).cpu().detach().numpy()
         # embedding = self.model(**encoded_input).last_hidden_state
         # return torch.ravel(torch.mean(embedding, dim=1)).detach().numpy()
 
@@ -105,18 +107,18 @@ class Story:
         self.story_text = story["TEXT"]
         self.story_id = story["STORYID"]
         # Count each word in the story
-        self._nlp = spacy.load("en_core_web_sm")
-        self._doc = self._nlp(self.story_text)
+        self.nlp = spacy.load("en_core_web_sm")
+        self.doc = self.nlp(self.story_text)
         words = set()
-        for token in self._doc:
+        for token in self.doc:
             if token.is_stop or not token.is_alpha:
                 continue
             words.add(token.lemma_)
-        self._word_list = list(words)
-        self._word_to_index = defaultdict(lambda: -1)
-        for i, word in enumerate(self._word_list):
-            self._word_to_index[word] = i
-        self.sentences: List[str] = [sent.text for sent in self._doc.sents]
+        self.word_list = list(words)
+        self.word_to_index = defaultdict(lambda: -1)
+        for i, word in enumerate(self.word_list):
+            self.word_to_index[word] = i
+        self.sentences: List[str] = [sent.text for sent in self.doc.sents]
         """
         A list of sentences in the story. Each sentence is a string.
         """
@@ -136,9 +138,9 @@ class Story:
             The vector representation of the sentence.
         """
         # Initialize the vector to zeros
-        word_vector = np.zeros(len(self._word_list))
+        word_vector = np.zeros(len(self.word_list))
         # Parse the sentence with spacy
-        doc = self._nlp(sentence)
+        doc = self.nlp(sentence)
 
         for token in doc:
             # Skip stop words and punctuation
@@ -147,15 +149,19 @@ class Story:
             # Lemmatize the word so we have a consistent representation
             lemma = token.lemma_
             # If the word is in our word list, add it to the vector
-            if lemma in self._word_to_index:
-                index = self._word_to_index[lemma]
+            if lemma in self.word_to_index:
+                index = self.word_to_index[lemma]
                 if index == -1:
                     continue
                 word_vector[index] += 1
         # Return the vector
         return word_vector
 
-    def most_similar_signature(self, sentence: str) -> str:
+    def most_similar_signature(
+        self,
+        sentence: str,
+        metric: Optional[Callable[[ArrayLike, ArrayLike],
+                                  float]] = None) -> str:
         """
         Finds the sentence in the story most similar to `sentence` in terms of
         its signature vector.
@@ -164,23 +170,28 @@ class Story:
         ----------
         sentence : str
             The sentence to compare to the story.
+        metric : Optional[Callable[[ArrayLike, ArrayLike], float]], optional
+            The metric to use to compare the signatures, by default None. If
+            none is provided, the cosine similarity is used.
 
         Returns
         -------
         str
             The sentence in the story most similar to `sentence`.
         """
+        if metric is None:
+            metric = cosine_similarity
         # Get the vector representation of the sentence
         sentence_vector = self.get_sentence_vector(sentence)
         # Find the sentence with the highest cosine similarity
         best_sentence = ""
-        best_similarity = -1
+        best_similarity = -float("inf")
         # Look through each sentence in the story
         for story_sentence in self.sentences:
             # Vectorize the other sentence
             story_vector = self.get_sentence_vector(story_sentence)
             # See how similar it is to the sentence passed in
-            similarity = cosine_similarity(sentence_vector, story_vector)
+            similarity = metric(sentence_vector, story_vector)
             # If it's the most similar so far, save it
             if similarity > best_similarity:
                 best_similarity = similarity
@@ -188,7 +199,12 @@ class Story:
         # Return the most similar sentence
         return best_sentence.strip()
 
-    def most_similar_embedding(self, bert: Bert, sentence: str) -> str:
+    def most_similar_embedding(
+        self,
+        bert: Bert,
+        sentence: str,
+        metric: Optional[Callable[[ArrayLike, ArrayLike],
+                                  float]] = None) -> str:
         """
         Finds the sentence in the story most similar to `sentence` in terms of
         its embedding vector.
@@ -197,23 +213,28 @@ class Story:
         ----------
         sentence : str
             The sentence to compare to the story.
+        metric : Optional[Callable[[ArrayLike, ArrayLike], float]], optional
+            The metric to use to compare the embeddings, by default None. If
+            none is provided, the cosine similarity is used.
 
         Returns
         -------
         str
             The sentence in the story most similar to `sentence`.
         """
+        if metric is None:
+            metric = cosine_similarity
         # Get the vector representation of the sentence
         sentence_vector = bert.get_embeddings(sentence)
         # Find the sentence with the highest cosine similarity
         best_sentence = ""
-        best_similarity = -1
+        best_similarity = -float("inf")
         # Look through each sentence in the story
         for story_sentence in self.sentences:
             # Vectorize the other sentence
             story_vector = bert.get_embeddings(story_sentence)
             # See how similar it is to the sentence passed in
-            similarity = cosine_similarity(sentence_vector, story_vector)
+            similarity = metric(sentence_vector, story_vector)
             # If it's the most similar so far, save it
             if similarity > best_similarity:
                 best_similarity = similarity
@@ -380,10 +401,11 @@ def text_f_score(answer: str, prediction: str) -> float:
         valid_words = valid.split()
         # Number of correct words in prediction
         correct_words = sum(word in valid_words for word in prediction_words)
-        recall = correct_words / len(valid_words)
+        recall = correct_words / len(valid_words) if valid_words else 0
         # Precision is the number of correct words divided by the number of
         # words in the prediction
-        precision = correct_words / len(prediction_words)
+        precision = correct_words / len(
+            prediction_words) if prediction_words else 0
         # f measure is the harmonic mean of precision and recall
         if recall == 0 and precision == 0:
             f_measure = 0
@@ -397,7 +419,9 @@ def text_f_score(answer: str, prediction: str) -> float:
 
 
 def get_story_question_answers(
-        directory: str) -> List[Tuple[Dict[str, str], List[Tuple[str, str]]]]:
+    directory: str,
+    limit: Optional[int] = None
+) -> List[Tuple[Dict[str, str], List[Tuple[str, str]]]]:
     """
     Get the story, question, and answer for each story in a directory.
 
@@ -405,6 +429,9 @@ def get_story_question_answers(
     ----------
     directory : str
         The directory path to the story files.
+    limit : Optional[int], optional
+        The number of stories to read, by default None. If limit is None, all
+        stories are read.
 
     Returns
     -------
@@ -416,11 +443,15 @@ def get_story_question_answers(
     for file in os.listdir(directory):
         if not file.endswith(".story"):
             continue
+        if limit is not None and len(files) >= limit:
+            break
         # Strip the file extension
         file = os.path.splitext(file)[0]
         files.append(file)
     story_qas = []
     for file in files:
+        if limit is not None and len(story_qas) >= limit:
+            break
         story = read_story(directory, file)
         answers = read_answers(directory, file)
         question_answer_pairs = [(group["Question"], group["Answer"])
@@ -428,3 +459,4 @@ def get_story_question_answers(
 
         story_qas.append((story, question_answer_pairs))
     return story_qas
+

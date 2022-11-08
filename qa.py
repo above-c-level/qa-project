@@ -4,8 +4,9 @@ import os
 import re
 from typing import Dict, List, Set, Tuple
 
-from helpers import read_questions, read_story, Story
+from helpers import Bert, read_questions, read_story, Story
 from terminalhelper import NEWLINE, VERBATIM, stringformat
+import numpy as np
 
 
 def parse_args():
@@ -75,12 +76,10 @@ def find_answer(question: str, story: Story) -> str:
     str
         The best response to the given question.
     """
-    prediction = story.most_similar_signature(question)
+    return story.most_similar_signature(question)
 
-    return prediction
 
-def answer_questions(story: Story,
-                     questions: List[Dict[str, str]]) -> None:
+def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
     """
     Answers the questions receieved from the questions list with the
     information saved in the story.
