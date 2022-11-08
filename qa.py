@@ -3,11 +3,15 @@ import argparse
 import os
 import sys
 import re
+import time
 from typing import Dict, List, Set, Tuple
 
 from helpers import Bert, read_questions, read_story, Story
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 import numpy as np
+
+
+TIMING = False
 
 
 def parse_args():
@@ -98,18 +102,20 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         print(f"QuestionID: {question_id}")
         # Print the question itself
         question_text = question_dict["Question"]
-        print(f"Question: {question_text}")
+        # print(f"Question: {question_text}")
         # Get question and run it through our answer function with the story
 
         answer = find_answer(question_text, story)
         # Print the answer
         print(f"Answer: {answer}")
         difficulty = question_dict["Difficulty"]
-        print(f"Difficulty: {difficulty}")
+        # print(f"Difficulty: {difficulty}")
         print()
 
 
 if __name__ == "__main__":
+    start = time.time()
+    stories = 0
     inputfile = parse_args()
     with open(inputfile, "r") as f:
         lines = f.readlines()
@@ -122,7 +128,14 @@ if __name__ == "__main__":
             questions = read_questions(directory, story_id)
             story_object = Story(story_dict)
             answer_questions(story_object, questions)
+            stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")
             continue
         # print(story_object.story_id)
+    end = time.time()
+    if TIMING:
+        total_time = end - start
+        time_per_story = total_time / stories
+        print(f"Took {time_per_story} seconds on average to answer a story")
+        print(f"Took {total_time} seconds to answer {stories} stories")

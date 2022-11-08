@@ -13,7 +13,6 @@ from sklearn.model_selection import train_test_split
 from transformers import AutoModel, AutoTokenizer
 
 
-
 def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
     """
     Computes the cosine similarity between two vectors.
