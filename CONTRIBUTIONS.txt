@@ -1,0 +1,18 @@
+(a) The functionalities that each person contributed to in the submitted QA system. 
+For example, one person might have written the code for question classification while 
+the other person wrote the code for extracting answer phrases.
+
+Most of the assignment was coding in a pair programming style. That means one while one person coded the other would
+watch and suggest certain structures or approaches. Then after a while we would switch roles. 
+
+Sephora coded the qa.py(which handles reading the information from the files and organizing it) 
+with Jesse offering advice and input and then Jessie coded the answer finding in the helpers.py 
+with input from Sephora.  
+
+
+(b) A list of the submitted source code files that each person had PRIMARY responsibility for.
+ In most cases, each source code file should be listed for just 1 person. But if the code for 
+ two distinct functionalities are in the same file, then indicate that.
+
+ Helpers.py -> Jesse
+ qa.py -> Sephora 
