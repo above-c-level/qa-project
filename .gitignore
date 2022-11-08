@@ -1,4 +1,7 @@
-.vscode/*
+.vscode
 __pycache__
 .vs
 model.pt
+cache
+*/launch.json
+ml_checkpoints

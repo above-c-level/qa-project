@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import argparse
 import os
+import sys
 import re
 from typing import Dict, List, Set, Tuple
 
@@ -105,6 +106,7 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         print(f"Answer: {answer}")
         difficulty = question_dict["Difficulty"]
         print(f"Difficulty: {difficulty}")
+        print()
 
 
 if __name__ == "__main__":
@@ -121,6 +123,6 @@ if __name__ == "__main__":
             story_object = Story(story_dict)
             answer_questions(story_object, questions)
         except FileNotFoundError:
-            print(f"Could not find story {story_id}")
+            sys.stderr.write(f"Could not find story {story_id}")
             continue
-        print(story_object.story_id)
+        # print(story_object.story_id)

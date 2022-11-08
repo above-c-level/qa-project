@@ -12,7 +12,6 @@ from numpy.typing import ArrayLike
 from sklearn.model_selection import train_test_split
 from transformers import AutoModel, AutoTokenizer
 
-from terminalhelper import NEWLINE, VERBATIM, stringformat
 
 
 def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
@@ -459,4 +458,3 @@ def get_story_question_answers(
 
         story_qas.append((story, question_answer_pairs))
     return story_qas
-
