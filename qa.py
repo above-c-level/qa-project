@@ -4,8 +4,9 @@ import os
 import re
 from typing import Dict, List, Set, Tuple
 
-from helpers import read_questions, read_story
+from helpers import Bert, read_questions, read_story, Story
 from terminalhelper import NEWLINE, VERBATIM, stringformat
+import numpy as np
 
 
 def parse_args():
@@ -59,7 +60,7 @@ is 20 kilometres away.
     return inputfile
 
 
-def find_answer(question: str, story: Dict[str, str]) -> str:
+def find_answer(question: str, story: Story) -> str:
     """
     Compare the question with the story, and return the best answer.
 
@@ -67,7 +68,7 @@ def find_answer(question: str, story: Dict[str, str]) -> str:
     ----------
     question : str
         The current question being asked.
-    story : Dict[str, str]
+    story : Story
         The saved story.
 
     Returns
@@ -75,20 +76,18 @@ def find_answer(question: str, story: Dict[str, str]) -> str:
     str
         The best response to the given question.
     """
-    answer = "every answer is correct?"
-    return answer
+    return story.most_similar_signature(question)
 
 
-def answer_questions(story: Dict[str, str],
-                     questions: List[Dict[str, str]]) -> None:
+def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
     """
     Answers the questions receieved from the questions list with the
     information saved in the story.
 
     Parameters
     ----------
-    story : Dict[str,str]
-        The story dictionary.
+    story : Story
+        The story object.
     questions : List[Dict[str,str]]
         The list of question dictionaries.
     """
@@ -100,6 +99,7 @@ def answer_questions(story: Dict[str, str],
         question_text = question_dict["Question"]
         print(f"Question: {question_text}")
         # Get question and run it through our answer function with the story
+
         answer = find_answer(question_text, story)
         # Print the answer
         print(f"Answer: {answer}")
@@ -116,10 +116,11 @@ if __name__ == "__main__":
     for line in lines:
         story_id = line.strip()
         try:
-            story = read_story(directory, story_id)
+            story_dict = read_story(directory, story_id)
             questions = read_questions(directory, story_id)
-            answer_questions(story, questions)
+            story_object = Story(story_dict)
+            answer_questions(story_object, questions)
         except FileNotFoundError:
             print(f"Could not find story {story_id}")
             continue
-        print(story["STORYID"])
+        print(story_object.story_id)
