@@ -2,7 +2,7 @@ import os
 import random
 import re
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -92,18 +92,24 @@ class Story:
     individual sentences.
     """
 
-    def __init__(self, story: Dict[str, str]):
+    def __init__(self, story: Union[str, Dict[str, str]]):
         # sourcery skip: set-comprehension
         """
         Parameters
         ----------
-        story_text : Dict[str, str]
+        story_text : Union[str, Dict[str, str]]
             The information about the story.
         """
-        assert "TEXT" in story
-        assert "STORYID" in story
-        self.story_text = story["TEXT"]
-        self.story_id = story["STORYID"]
+        # If we were given a dictionary, get the text from it
+        if isinstance(story, dict):
+            assert "TEXT" in story
+            assert "STORYID" in story
+            self.story_text = story["TEXT"]
+            self.story_id = story["STORYID"]
+        # Otherwise, assume we were given the text
+        else:
+            self.story_text = story
+            self.story_id = None
         # Count each word in the story
         self.nlp = spacy.load("en_core_web_sm")
         self.doc = self.nlp(self.story_text)
@@ -121,7 +127,7 @@ class Story:
         A list of sentences in the story. Each sentence is a string.
         """
 
-    def get_sentence_vector(self, sentence: str) -> ArrayLike:
+    def get_sentence_vector(self, sentence: str) -> np.ndarray:
         """
         Get the vector representation of a sentence.
 
@@ -239,6 +245,7 @@ class Story:
                 best_sentence = story_sentence
         # Return the most similar sentence
         return best_sentence.strip()
+
 
 
 def read_story(directory: str, story_id: str) -> Dict[str, str]:
@@ -371,26 +378,29 @@ def read_answers(directory: str, story_id: str) -> List[Dict[str, str]]:
     return question_dicts
 
 
-def text_f_score(answer: str, prediction: str) -> float:
+def text_f_score(answer: str, prediction: str) -> Tuple[float, float, float]:
     """
-    Returns the f measure of a prediction compared with the answer
+    Returns the recall, precision, and f measure of a prediction compared
+    with the answer
 
     Parameters
     ----------
     answer : str
-        The ground truth answer
+        The ground truth answer(s)
     prediction : str
         The predicted answer
 
     Returns
     -------
-    float
-        The f measure
+    Tuple[float, float, float]
+        The recall, precision, and f measure of the prediction, respectively
     """
     prediction = prediction.strip()
     # Unlike predictions, answers can have multiple valid answers
     # Split the answer into a list of answers about the pipe character (|)
     answers = [valid.strip() for valid in answer.split("|")]
+    best_recall = -float('inf')
+    best_precision = -float('inf')
     best_f_score = -float('inf')
     prediction_words = prediction.split()
     for valid in answers:
@@ -411,9 +421,13 @@ def text_f_score(answer: str, prediction: str) -> float:
             f_measure = 2 * (precision * recall) / (precision + recall)
         if f_measure > best_f_score:
             best_f_score = f_measure
+        if recall > best_recall:
+            best_recall = recall
+        if precision > best_precision:
+            best_precision = precision
     # Return the best f measure given the prediction since there can be multiple
     # valid answers
-    return best_f_score
+    return best_recall, best_precision, best_f_score
 
 
 def get_story_question_answers(

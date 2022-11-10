@@ -11,8 +11,8 @@ Everything currently being used is:
 
 
 We also have installed the small model for spacy, which can be installed with
-`python -m spacy download en_core_web_sm`, and the the extra index url
-installed for torch, which can be installed with
+`python -m spacy download en_core_web_sm`, and the extra index url installed
+for torch, which can be installed with
 `pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116`
 
 (b) A time estimate of how long your system takes to process ONE story. (This
