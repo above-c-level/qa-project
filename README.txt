@@ -19,11 +19,11 @@ for torch, which can be installed with
 is to give the TAs some estimate of how long they will need to wait to see the
 results.)
 
-An average story takes about 1 second to output on our personal computers.
+An average story takes about 1 second to output.
 
 (c) Any known problems or limitations of your system.
 
 We are currently returning the full sentence that we believe the answer is in
 by creating signature vectors of the questions based on the words contained in
 the stories. This isn't exactly the *best* approach, but it does seem to give
-us roughly 0.18 for the f score.
+us roughly 0.22 for the f score.
