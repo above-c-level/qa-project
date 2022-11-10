@@ -163,6 +163,8 @@ else:
     X = np.array(X)
     y = np.array(y)
     stories = (story_qas, X, y)
+    if not os.path.exists("data"):
+        os.mkdir("data")
     with open("data/stories.pkl", "wb") as f:
         pickle.dump(stories, f)
 
@@ -179,7 +181,7 @@ for name, model_choice in all_models.items():
     cv_model = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
     pipeline = make_pipeline(
         VarianceThreshold(),
-        SelectKBest(k=10),
+        SelectKBest(k=40),
         model_choice,
     )
     try:
