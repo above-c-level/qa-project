@@ -1,20 +1,38 @@
+import json
 import os
 import random
-from typing import Dict, List, Set, Tuple
+import shutil
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
+import numpy.linalg as la
 import torch
+
+# though for now, it should work with no issue
+from sklearn.metrics import (accuracy_score, f1_score, jaccard_score, log_loss,
+                             precision_score, recall_score, roc_auc_score)
+from sklearn.metrics import (mean_absolute_error, mean_squared_error, r2_score,
+                             make_scorer)
 from sklearn.model_selection import (train_test_split, cross_val_predict,
-                                     cross_validate, StratifiedKFold)
+                                     cross_validate, StratifiedKFold,
+                                     HalvingRandomSearchCV)
 from sklearn.pipeline import make_pipeline
 from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
-from sklearn.preprocessing import StandardScaler
-
+from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
+                                   RobustScaler, StandardScaler,
+                                   PowerTransformer)
 from helpers import Bert, Story, get_story_question_answers, text_f_score
 from tqdm import tqdm
-from ml_model import model, all_models
+from ml_model import best_model
 import pickle
 import time
+import warnings
+from numpy.typing import ArrayLike
+from tpot import TPOTClassifier
+from pprint import pprint
+from pathlib import Path
+
+warnings.filterwarnings("ignore")
 
 
 def answer_in_sentence(answer: str, sentence: str) -> bool:
@@ -78,35 +96,90 @@ def get_scores_from_prob(
     return recalls, precisions, f_scores
 
 
-if os.path.exists("data/stories.pkl"):
-    print("Loading stories from pickle file")
-    with open("data/stories.pkl", "rb") as f:
-        stories = pickle.load(f)
-        story_qas, X, y = stories
-else:
-    print("No stories.pkl found, generating")
-    story_qas = get_story_question_answers('devset-official')
-    bert = Bert()
-    X = []
-    y = []
-    scores = []
-    largest_signature = 0
-    seen_embeddings = {}
-    seen_signatures = {}
-    story_texts = []
-    question_embeddings = []
-    sentence_embeddings = []
-    question_signatures = []
-    sentence_signatures = []
+def get_balanced_data(
+    X: np.ndarray,
+    y: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Narrows down data to be more balanced by predicted class. Since our data has
+    far fewer 0s than 1s, we want to try to balance the data so that we can
+    avoid overfitting to the 0s. This is done by randomly selecting a subset of
+    the 0s to equal the number of 1s.
 
-    # Add all words from stories to an input set so we can have a
-    # constant-length signature vector
-    for story_dict, question_answer_pairs in story_qas:
-        story_texts.append(story_dict['TEXT'])
-    full_signature_text = Story(" ".join(story_texts))
+    Parameters
+    ----------
+    X : np.ndarray
+        The data to narrow down.
+    y : np.ndarray
+        The targets of the data, where each x_i in X corresponds to y_i in y.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        The balanced data and targets.
+    """
+    true_X = []
+    true_y = []
+    false_X = []
+    false_y = []
+    for input_data, target in zip(X, y):
+        if target == 1:
+            true_X.append(input_data)
+            true_y.append(target)
+        else:
+            false_X.append(input_data)
+            false_y.append(target)
+    print(len(true_X))
+    print(len(false_X))
+    new_X = []
+    new_y = []
+    # Since we have so many more false examples than true examples, we'll randomly
+    # sample from the false examples to get a more balanced dataset. Because we know
+    # what true_X and false_X map to, we can shuffle both of them
+    random.shuffle(false_X)
+    random.shuffle(true_X)
+
+    for i in range(len(true_X)):
+        new_X.append(true_X[i])
+        new_y.append(1)
+        new_X.append(false_X[i])
+        new_y.append(0)
+
+    new_X = np.array(new_X)
+    new_y = np.array(new_y)
+    return new_X, new_y
+
+
+def get_representative_vectors(
+    story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
+    bert: Bert,
+    full_signature_text: Story,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    """
+    Get the representative vectors for each story and question-answer pair.
+
+    Parameters
+    ----------
+    story_qas : List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+        The story and question-answer pairs to get the representative vectors
+        for.
+    bert : Bert
+        An instance of the Bert class to use to get the representative vectors.
+    full_signature_text : Story
+        The full signature text to use to get the representative vectors.
+
+    Returns
+    -------
+    Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]
+        The representative vectors for each story and question-answer pair.
+        Contains both bert embeddings and the full signature text embeddings
+        calculated by word counts.
+    """
+    seen_embeddings: Dict[str, np.ndarray] = {}
+    seen_signatures: Dict[str, np.ndarray] = {}
     for story_dict, question_answer_pairs in tqdm(story_qas):
         story_object = Story(story_dict)
-        for question, answer in question_answer_pairs:
+        for question, _ in question_answer_pairs:
             # Get the embedding and signature vectors, and store them
             if question not in seen_embeddings:
                 seen_embeddings[question] = bert.get_embeddings(question)
@@ -121,8 +194,40 @@ else:
                 if sentence not in seen_signatures:
                     vector = full_signature_text.get_sentence_vector(sentence)
                     seen_signatures[sentence] = vector
-    print("Processing collected data")
+    return seen_embeddings, seen_signatures
 
+
+def process_data(
+    story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
+    seen_embeddings: Dict[str, np.ndarray],
+    seen_signatures: Dict[str, np.ndarray],
+) -> Tuple[List[int], List[np.ndarray], List[np.ndarray], List[np.ndarray],
+           List[np.ndarray]]:
+    """
+    Process the data for all of the stories and question-answer pairs using
+    all embeddings and signature vectors. Returns the target, question
+    embeddings, sentence embeddings, question signatures, and sentence
+    signatures.
+
+    Parameters
+    ----------
+    story_qas : List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+        The story and question-answer pairs to process.
+    seen_embeddings : Dict[str, np.ndarray]
+        The embeddings for each sentence and question.
+    seen_signatures : Dict[str, np.ndarray]
+        The signature vectors for each sentence and question.
+
+    Returns
+    -------
+    Tuple[List[int], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]
+        _description_
+    """
+    y: List[int] = []
+    question_embeddings: List[np.ndarray] = []
+    sentence_embeddings: List[np.ndarray] = []
+    question_signatures: List[np.ndarray] = []
+    sentence_signatures: List[np.ndarray] = []
     # Now we have all the embeddings, all the signatures, and knowledge of
     # what the largest signature vector is. We can now create our X and y
     # (input and target output) to train models on
@@ -143,23 +248,42 @@ else:
                 question_signatures.append(question_signature)
                 sentence_signatures.append(sentence_signature)
                 y.append(target)
+    return (y, question_embeddings, sentence_embeddings, question_signatures,
+            sentence_signatures)
 
-    question_embeddings = StandardScaler().fit_transform(question_embeddings)
-    sentence_embeddings = StandardScaler().fit_transform(sentence_embeddings)
-    question_signatures = StandardScaler().fit_transform(question_signatures)
-    sentence_signatures = StandardScaler().fit_transform(sentence_signatures)
-    embeddings_diff = question_embeddings - sentence_embeddings
-    signatures_diff = question_signatures - sentence_signatures
-    # Convert X to a numpy array
+
+def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
+                            np.ndarray, np.ndarray]:
+    """
+    Collects the data from the stories and question-answer pairs, and returns
+    them processed into X and y as the input and target output.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        The input and target output for the model.
+    """
+    story_qas = get_story_question_answers('devset-official')
+    bert = Bert()
+
+    # Add all words from stories to an input set so we can have a
+    # constant-length signature vector
+    story_texts = [story_dict['TEXT'] for story_dict, _ in story_qas]
+
+    full_signature_text = Story(" ".join(story_texts))
+    seen_embeddings, seen_signatures = get_representative_vectors(
+        story_qas, bert, full_signature_text)
+    print("Processing collected data")
+
+    (y, q_embeds, sent_embeds, q_sigs,
+     sent_sigs) = process_data(story_qas, seen_embeddings, seen_signatures)
+    # TODO: Figure out what ways we can add useful features
+    hadamard_embeddings = hadamard_similarity(q_embeds, sent_embeds)
+    hadamard_signatures = hadamard_similarity(q_sigs, sent_sigs)
     X = np.concatenate((
-        question_embeddings,
-        sentence_embeddings,
-        question_signatures,
-        sentence_signatures,
-        embeddings_diff,
-        signatures_diff,
-    ),
-                       axis=1)
+        hadamard_embeddings,
+        hadamard_signatures,
+    ), axis=1)
     X = np.array(X)
     y = np.array(y)
     stories = (story_qas, X, y)
@@ -167,77 +291,79 @@ else:
         os.mkdir("data")
     with open("data/stories.pkl", "wb") as f:
         pickle.dump(stories, f)
+    return stories
 
-train_x, test_x, train_y, test_y = train_test_split(X,
-                                                    y,
-                                                    test_size=0.5,
-                                                    shuffle=True)
-# print(f"Training set size: {len(train_x)}")
-# print(f"Test set size: {len(test_x)}")
-results = []
-for name, model_choice in all_models.items():
-    print(f"Training {name}")
+
+
+if __name__ == "__main__":
+    if os.path.exists("data/stories.pkl"):
+        print("Loading stories from pickle file")
+        with open("data/stories.pkl", "rb") as f:
+            stories = pickle.load(f)
+            story_qas, X, y = stories
+    else:
+        print("No stories.pkl found, generating")
+        story_qas, X, y = collect_data()
+
+    cv_model = StratifiedKFold(n_splits=10, shuffle=True)
+    # n_fits = fit_n_models(100, X, y, 60 * 5, checkpoint_folder="random_ml")
+    # Sort n_fits by test score
+    # pprint(n_fits.sort(key=lambda x: x[0], reverse=True))
+
+    # print(f"Training set size: {len(train_x)}")
+    # print(f"Test set size: {len(test_x)}")
+    # all_results = {}
+    # results = []
     start = time.time()
-    cv_model = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-    pipeline = make_pipeline(
-        VarianceThreshold(),
-        SelectKBest(k=40),
-        model_choice,
+    # # for name, model_choice in all_models.items():
+    # print("Training pipeline")
+    pipeline = best_model
+
+    # print("Fitting pipeline")
+    # try:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict_proba")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(
+    #         story_qas, cross_val)
+    # except AttributeError:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
+    #                                                          cross_val,
+    #                                                          is_pred=True)
+    # It takes a *very* long time to get the sco res directly, so I wrote
+    # a thing that makes it so we can approximate the scores using even
+    # more machine learning
+
+    # end = time.time()
+
+    # print(f"Time taken: {end - start}")
+    # print(f"Proxied score: {proxied_score}")
+    # print(f"Recall: {np.mean(recalls)}")
+    # print(f"Precision: {np.mean(precisions)}")
+    # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
+    # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
+    #                                                      np.mean(recalls))
+    # print(f"F1: {f1}")
+    tpot = TPOTClassifier(
+        generations=5,
+        population_size=20,
+        cv=10,
+        verbosity=2,
+        scoring="recall",
+        periodic_checkpoint_folder='ml_checkpoints',
+        config_dict='TPOT light',
     )
-    try:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict_proba")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(
-            story_qas, cross_val)
-    except AttributeError:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(story_qas,
-                                                             cross_val,
-                                                             is_pred=True)
-    end = time.time()
-    print(f"Time: {end - start}")
-    # tpot = TPOTClassifier(
-    #     generations=10,
-    #     population_size=50,
-    #     verbosity=3,
-    #     max_eval_time_mins=2,
-    #     early_stop=5,
-    #     periodic_checkpoint_folder='ml_checkpoints',
-    #     memory='D:/tpot_cache/',
-    #     cv=3,
-    #     warm_start=True,
-    # )
-    # X = np.array(train_x)
-    # y = np.array(train_y)
-    # tpot.fit(X, y)
-    # print(tpot.score(X, y))
+    X, y = get_balanced_data(X, y)
+    # train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2)
+    # tpot.fit(train_X, train_y)
+    # print(tpot.score(test_X, test_y))
     # tpot.export('tpot_pipeline.py')
-
-    mean_recall = np.mean(recalls)
-    mean_precision = np.mean(precisions)
-    mean_f_score = np.mean(f_scores)
-    recalc_f_score = (2 * mean_precision * mean_recall /
-                      (mean_precision + mean_recall))
-    print(f"Recall: {mean_recall}")
-    print(f"Precision: {mean_precision}")
-    # print(f"F-score: {mean_f_score}")
-    print(f"Recalculated F score: {recalc_f_score}")
-    print()
-    results.append((
-        name,
-        end - start,
-        mean_recall,
-        mean_precision,
-        recalc_f_score,
-    ))
-
-print(results)
