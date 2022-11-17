@@ -8,20 +8,16 @@ import numpy as np
 import numpy.linalg as la
 import torch
 
-# though for now, it should work with no issue
-from sklearn.metrics import (accuracy_score, f1_score, jaccard_score, log_loss,
-                             precision_score, recall_score, roc_auc_score)
-from sklearn.metrics import (mean_absolute_error, mean_squared_error, r2_score,
-                             make_scorer)
+
 from sklearn.model_selection import (train_test_split, cross_val_predict,
-                                     cross_validate, StratifiedKFold,
-                                     HalvingRandomSearchCV)
-from sklearn.pipeline import make_pipeline
+                                     cross_validate, StratifiedKFold)
+
 from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
 from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    RobustScaler, StandardScaler,
                                    PowerTransformer)
 from helpers import Bert, Story, get_story_question_answers, text_f_score
+from scipy.spatial import distance
 from tqdm import tqdm
 from ml_model import best_model
 import pickle
@@ -31,6 +27,8 @@ from numpy.typing import ArrayLike
 from tpot import TPOTClassifier
 from pprint import pprint
 from pathlib import Path
+from config_dicts import classifier_config_dict_extra_fast as config_to_use
+from pprint import pprint
 
 warnings.filterwarnings("ignore")
 
@@ -221,7 +219,8 @@ def process_data(
     Returns
     -------
     Tuple[List[int], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]
-        _description_
+        The target, question embeddings, sentence embeddings, question
+        signatures, and sentence signatures.
     """
     y: List[int] = []
     question_embeddings: List[np.ndarray] = []
@@ -252,6 +251,43 @@ def process_data(
             sentence_signatures)
 
 
+def get_distances(questions: ArrayLike, sentences: ArrayLike) -> np.ndarray:
+    """
+    Get the distances between each question and sentence.
+
+    Parameters
+    ----------
+    questions : ArrayLike
+        The question vectors
+    sentences : ArrayLike
+        The sentence vectors
+
+    Returns
+    -------
+    np.ndarray
+        Various distances between each question and sentence.
+    """
+    # Questions and sentences are basically 2D arrays, where each row is a
+    # vector. We want to get the distance between each question and each
+    # sentence (they are already paired up)
+    distances = []
+    for question, sentence in zip(questions, sentences):
+        row_distance = []
+        # Get the distance between the two vectors
+        row_distance.append(distance.cosine(question, sentence))
+        row_distance.append(distance.euclidean(question, sentence))
+        row_distance.append(distance.braycurtis(question, sentence))
+        row_distance.append(distance.canberra(question, sentence))
+        row_distance.append(distance.chebyshev(question, sentence))
+        row_distance.append(distance.cityblock(question, sentence))
+        # row_distance.append(distance.correlation(question, sentence))
+        row_distance.append(distance.minkowski(question, sentence, p=3))
+        row_distance.append(distance.minkowski(question, sentence, p=4))
+        row_distance.append(distance.sqeuclidean(question, sentence))
+        distances.append(row_distance)
+    return np.array(distances)
+
+
 def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
                             np.ndarray, np.ndarray]:
     """
@@ -277,13 +313,13 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
 
     (y, q_embeds, sent_embeds, q_sigs,
      sent_sigs) = process_data(story_qas, seen_embeddings, seen_signatures)
-    # TODO: Figure out what ways we can add useful features
-    hadamard_embeddings = hadamard_similarity(q_embeds, sent_embeds)
-    hadamard_signatures = hadamard_similarity(q_sigs, sent_sigs)
+    embedding_distances = get_distances(q_embeds, sent_embeds)
+    signature_distances = get_distances(q_sigs, sent_sigs)
     X = np.concatenate((
-        hadamard_embeddings,
-        hadamard_signatures,
+        embedding_distances,
+        signature_distances,
     ), axis=1)
+
     X = np.array(X)
     y = np.array(y)
     stories = (story_qas, X, y)
@@ -292,7 +328,6 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     with open("data/stories.pkl", "wb") as f:
         pickle.dump(stories, f)
     return stories
-
 
 
 if __name__ == "__main__":
@@ -306,6 +341,7 @@ if __name__ == "__main__":
         story_qas, X, y = collect_data()
 
     cv_model = StratifiedKFold(n_splits=10, shuffle=True)
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2)
     # n_fits = fit_n_models(100, X, y, 60 * 5, checkpoint_folder="random_ml")
     # Sort n_fits by test score
     # pprint(n_fits.sort(key=lambda x: x[0], reverse=True))
@@ -314,10 +350,8 @@ if __name__ == "__main__":
     # print(f"Test set size: {len(test_x)}")
     # all_results = {}
     # results = []
-    start = time.time()
-    # # for name, model_choice in all_models.items():
-    # print("Training pipeline")
-    pipeline = best_model
+    # start = time.time()
+    # pipeline = best_model
 
     # print("Fitting pipeline")
     # try:
@@ -339,31 +373,67 @@ if __name__ == "__main__":
     #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
     #                                                          cross_val,
     #                                                          is_pred=True)
-    # It takes a *very* long time to get the sco res directly, so I wrote
-    # a thing that makes it so we can approximate the scores using even
-    # more machine learning
 
     # end = time.time()
 
     # print(f"Time taken: {end - start}")
-    # print(f"Proxied score: {proxied_score}")
     # print(f"Recall: {np.mean(recalls)}")
     # print(f"Precision: {np.mean(precisions)}")
     # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
     # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
     #                                                      np.mean(recalls))
     # print(f"F1: {f1}")
+
+    # classifier_config_dict['lightgbm.LGBMClassifier'] = {
+    #     'boosting_type': ['gbdt', 'dart', 'rf'],
+    #     'num_leaves': [
+    #         2, 4, 7, 10, 15, 20, 25, 30, 35, 40, 50, 65, 80, 100, 125, 150,
+    #         200, 250, 500
+    #     ],
+    #     'learning_rate': [0.01, 0.05, 0.1],
+    #     'n_estimators':
+    #     [5, 20, 35, 50, 75, 100, 150, 200, 350, 500, 750, 1000, 1500, 2000],
+    #     'min_child_samples':
+    #     [1, 5, 7, 10, 15, 20, 35, 50, 100, 200, 500, 1000],
+    #     'subsample': [0.66, 0.7, 0.8, 0.9, 1.0],
+    #     'colsample_bytree': [0.7, 0.9, 1.0],
+    # }
+
     tpot = TPOTClassifier(
-        generations=5,
-        population_size=20,
-        cv=10,
-        verbosity=2,
-        scoring="recall",
+        generations=20,
+        population_size=100,
+        cv=5,
+        verbosity=3,
+        scoring="f1",
         periodic_checkpoint_folder='ml_checkpoints',
-        config_dict='TPOT light',
+        config_dict=config_to_use,
+        max_eval_time_mins=5,
     )
-    X, y = get_balanced_data(X, y)
-    # train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2)
-    # tpot.fit(train_X, train_y)
-    # print(tpot.score(test_X, test_y))
-    # tpot.export('tpot_pipeline.py')
+    tpot.fit(train_X, train_y)
+    print(tpot.score(test_X, test_y))
+    tpot.export('tpot_pipeline.py')
+    # times_taken = {}
+    # for model_name, model_type in test_models.items():
+    #     print(f"\rTesting {model_name:<60}", end='')
+    #     start = time.time()
+    #     model_type.fit(train_X, train_y)
+    #     end = time.time()
+    #     predictions = model_type.predict(test_X)
+    #     times_taken[model_name] = (end - start, f1_score(test_y, predictions))
+    # print()
+    # sorted_times = sorted(times_taken.items(), key=lambda x: x[1][0])
+    # for model_name, (time_taken, f1) in sorted_times:
+    #     print(f"{model_name:>60} {time_taken:<10.5f} {f1:<10.5f}")
+    # print("\n")
+    # times_taken = {}
+    # for preprocessor_name, preprocessor in test_preprocessors.items():
+    #     print(f"\rTesting preprocessor {preprocessor_name}", end='')
+    #     start = time.time()
+    #     preprocessor.fit(train_X, train_y)
+    #     new = preprocessor.transform(train_X)
+    #     end = time.time()
+    #     times_taken[preprocessor_name] = (end - start)
+    # print()
+    # sorted_times = sorted(times_taken.items(), key=lambda x: x[1])
+    # for preprocessor_name, time_taken in sorted_times:
+    #     print(f"{preprocessor_name:>60} {time_taken:<10.5f}")
