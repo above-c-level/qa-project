@@ -97,6 +97,7 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         The list of question dictionaries.
     """
     for question_dict in questions:
+
         # Get and print question ID
         question_id = question_dict["QuestionID"]
         print(f"QuestionID: {question_id}")

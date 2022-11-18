@@ -16,7 +16,7 @@ from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
 from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    RobustScaler, StandardScaler,
                                    PowerTransformer)
-from helpers import Bert, Story, get_story_question_answers, text_f_score
+from helpers import (Bert, Story, get_story_question_answers, text_f_score, SentenceScores)
 from scipy.spatial import distance
 from tqdm import tqdm
 from ml_model import best_model
@@ -24,7 +24,7 @@ import pickle
 import time
 import warnings
 from numpy.typing import ArrayLike
-from tpot import TPOTClassifier
+# from tpot import TPOTClassifier
 from pprint import pprint
 from pathlib import Path
 from config_dicts import classifier_config_dict_extra_fast as config_to_use
@@ -315,6 +315,14 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
      sent_sigs) = process_data(story_qas, seen_embeddings, seen_signatures)
     embedding_distances = get_distances(q_embeds, sent_embeds)
     signature_distances = get_distances(q_sigs, sent_sigs)
+
+    story_type_values = []
+    for story_dict, qa_pair in story_qas:
+        story = Story(story_dict)
+        questions = [question for question, _ in qa_pair]
+        sentences_type_value = SentenceInformation.get_sentence_scores(story, questions)
+        
+
     X = np.concatenate((
         embedding_distances,
         signature_distances,
@@ -350,39 +358,39 @@ if __name__ == "__main__":
     # print(f"Test set size: {len(test_x)}")
     # all_results = {}
     # results = []
-    # start = time.time()
-    # pipeline = best_model
+    start = time.time()
+    pipeline = best_model
 
-    # print("Fitting pipeline")
-    # try:
-    #     cross_val = cross_val_predict(pipeline,
-    #                                   X,
-    #                                   y,
-    #                                   cv=cv_model,
-    #                                   method="predict_proba")
-    #     cross_val = np.array(cross_val)
-    #     recalls, precisions, f_scores = get_scores_from_prob(
-    #         story_qas, cross_val)
-    # except AttributeError:
-    #     cross_val = cross_val_predict(pipeline,
-    #                                   X,
-    #                                   y,
-    #                                   cv=cv_model,
-    #                                   method="predict")
-    #     cross_val = np.array(cross_val)
-    #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
-    #                                                          cross_val,
-    #                                                          is_pred=True)
+    print("Fitting pipeline")
+    try:
+        cross_val = cross_val_predict(pipeline,
+                                      X,
+                                      y,
+                                      cv=cv_model,
+                                      method="predict_proba")
+        cross_val = np.array(cross_val)
+        recalls, precisions, f_scores = get_scores_from_prob(
+            story_qas, cross_val)
+    except AttributeError:
+        cross_val = cross_val_predict(pipeline,
+                                      X,
+                                      y,
+                                      cv=cv_model,
+                                      method="predict")
+        cross_val = np.array(cross_val)
+        recalls, precisions, f_scores = get_scores_from_prob(story_qas,
+                                                             cross_val,
+                                                             is_pred=True)
 
-    # end = time.time()
+    end = time.time()
 
-    # print(f"Time taken: {end - start}")
-    # print(f"Recall: {np.mean(recalls)}")
-    # print(f"Precision: {np.mean(precisions)}")
-    # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
-    # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
-    #                                                      np.mean(recalls))
-    # print(f"F1: {f1}")
+    print(f"Time taken: {end - start}")
+    print(f"Recall: {np.mean(recalls)}")
+    print(f"Precision: {np.mean(precisions)}")
+    print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
+    f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
+                                                         np.mean(recalls))
+    print(f"F1: {f1}")
 
     # classifier_config_dict['lightgbm.LGBMClassifier'] = {
     #     'boosting_type': ['gbdt', 'dart', 'rf'],
@@ -399,19 +407,19 @@ if __name__ == "__main__":
     #     'colsample_bytree': [0.7, 0.9, 1.0],
     # }
 
-    tpot = TPOTClassifier(
-        generations=20,
-        population_size=100,
-        cv=5,
-        verbosity=3,
-        scoring="f1",
-        periodic_checkpoint_folder='ml_checkpoints',
-        config_dict=config_to_use,
-        max_eval_time_mins=5,
-    )
-    tpot.fit(train_X, train_y)
-    print(tpot.score(test_X, test_y))
-    tpot.export('tpot_pipeline.py')
+    # tpot = TPOTClassifier(
+    #     generations=20,
+    #     population_size=100,
+    #     cv=5,
+    #     verbosity=3,
+    #     scoring="f1",
+    #     periodic_checkpoint_folder='ml_checkpoints',
+    #     config_dict=config_to_use,
+    #     max_eval_time_mins=5,
+    # )
+    # tpot.fit(train_X, train_y)
+    # print(tpot.score(test_X, test_y))
+    # tpot.export('tpot_pipeline.py')
     # times_taken = {}
     # for model_name, model_type in test_models.items():
     #     print(f"\rTesting {model_name:<60}", end='')
