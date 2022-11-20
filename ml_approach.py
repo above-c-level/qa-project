@@ -1,13 +1,13 @@
+from collections import Counter
 import json
 import os
 import random
 import shutil
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
 import numpy as np
 import numpy.linalg as la
 import torch
-
 
 from sklearn.model_selection import (train_test_split, cross_val_predict,
                                      cross_validate, StratifiedKFold)
@@ -16,7 +16,9 @@ from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
 from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    RobustScaler, StandardScaler,
                                    PowerTransformer)
-from helpers import (Bert, Story, get_story_question_answers, text_f_score, SentenceScores)
+from helpers import (Bert, Story, get_story_question_answers, text_f_score)
+from sklearn.metrics import accuracy_score
+from sentence_scorer import SentenceScorer
 from scipy.spatial import distance
 from tqdm import tqdm
 from ml_model import best_model
@@ -24,11 +26,10 @@ import pickle
 import time
 import warnings
 from numpy.typing import ArrayLike
-# from tpot import TPOTClassifier
+from tpot import TPOTClassifier
 from pprint import pprint
 from pathlib import Path
 from config_dicts import classifier_config_dict_extra_fast as config_to_use
-from pprint import pprint
 
 warnings.filterwarnings("ignore")
 
@@ -131,9 +132,10 @@ def get_balanced_data(
     print(len(false_X))
     new_X = []
     new_y = []
-    # Since we have so many more false examples than true examples, we'll randomly
-    # sample from the false examples to get a more balanced dataset. Because we know
-    # what true_X and false_X map to, we can shuffle both of them
+    # Since we have so many more false examples than true examples, we'll
+    # randomly sample from the false examples to get a more balanced dataset.
+    # Because we know what true_X and false_X map to, we can shuffle both
+    # of them
     random.shuffle(false_X)
     random.shuffle(true_X)
 
@@ -195,6 +197,29 @@ def get_representative_vectors(
     return seen_embeddings, seen_signatures
 
 
+def unpack_stories(
+    story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+) -> Generator[Tuple[Story, str, str, str], None, None]:
+    """
+    A generator which yields story objects, questions, answers, and sentences.
+
+    Parameters
+    ----------
+    story_qas : List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+        The story and question-answer pairs to unpack.
+
+    Yields
+    ------
+    Generator[Tuple[Story, str, str, str], None, None]
+        A tuple containing a story object, a question, an answer, and a sentence.
+    """
+    for story_dict, question_answer_pairs in story_qas:
+        story_object = Story(story_dict)
+        for question, answer in question_answer_pairs:
+            for sentence in story_object.sentences:
+                yield story_object, question, answer, sentence
+
+
 def process_data(
     story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     seen_embeddings: Dict[str, np.ndarray],
@@ -218,7 +243,8 @@ def process_data(
 
     Returns
     -------
-    Tuple[List[int], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]
+    Tuple[List[int], List[np.ndarray], List[np.ndarray], List[np.ndarray],
+    List[np.ndarray]]
         The target, question embeddings, sentence embeddings, question
         signatures, and sentence signatures.
     """
@@ -230,23 +256,20 @@ def process_data(
     # Now we have all the embeddings, all the signatures, and knowledge of
     # what the largest signature vector is. We can now create our X and y
     # (input and target output) to train models on
-    for story_dict, question_answer_pairs in tqdm(story_qas):
-        story_object = Story(story_dict)
-        for question, answer in question_answer_pairs:
-            # Grab the saved vectors
-            question_embedding = seen_embeddings[question]
-            question_signature = seen_signatures[question]
-            for sentence in story_object.sentences:
-                sentence_embedding = seen_embeddings[sentence]
+    for _, question, answer, sentence in tqdm(unpack_stories(story_qas), total=18152):
+        # Grab the saved vectors
+        question_embedding = seen_embeddings[question]
+        question_signature = seen_signatures[question]
 
-                sentence_signature = seen_signatures[sentence]
-                # Is answer in sentence?
-                target = 1 if answer_in_sentence(answer, sentence) else 0
-                question_embeddings.append(question_embedding)
-                sentence_embeddings.append(sentence_embedding)
-                question_signatures.append(question_signature)
-                sentence_signatures.append(sentence_signature)
-                y.append(target)
+        sentence_embedding = seen_embeddings[sentence]
+        sentence_signature = seen_signatures[sentence]
+        # Is answer in sentence?
+        target = 1 if answer_in_sentence(answer, sentence) else 0
+        question_embeddings.append(question_embedding)
+        sentence_embeddings.append(sentence_embedding)
+        question_signatures.append(question_signature)
+        sentence_signatures.append(sentence_signature)
+        y.append(target)
     return (y, question_embeddings, sentence_embeddings, question_signatures,
             sentence_signatures)
 
@@ -271,7 +294,7 @@ def get_distances(questions: ArrayLike, sentences: ArrayLike) -> np.ndarray:
     # vector. We want to get the distance between each question and each
     # sentence (they are already paired up)
     distances = []
-    for question, sentence in zip(questions, sentences):
+    for question, sentence in zip(questions, sentences):  # type: ignore
         row_distance = []
         # Get the distance between the two vectors
         row_distance.append(distance.cosine(question, sentence))
@@ -317,16 +340,18 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     signature_distances = get_distances(q_sigs, sent_sigs)
 
     story_type_values = []
-    for story_dict, qa_pair in story_qas:
-        story = Story(story_dict)
-        questions = [question for question, _ in qa_pair]
-        sentences_type_value = SentenceInformation.get_sentence_scores(story, questions)
-        
 
+    for story, question, _, sentence in tqdm(unpack_stories(story_qas), total=18152):
+        scores = SentenceScorer.get_sentence_scores(story, question, sentence)
+        story_type_values.append(scores)
+
+    story_type_values = np.array(story_type_values)
     X = np.concatenate((
         embedding_distances,
         signature_distances,
-    ), axis=1)
+        story_type_values,
+    ),
+                       axis=1)
 
     X = np.array(X)
     y = np.array(y)
@@ -359,38 +384,38 @@ if __name__ == "__main__":
     # all_results = {}
     # results = []
     start = time.time()
-    pipeline = best_model
+    # pipeline = best_model
 
-    print("Fitting pipeline")
-    try:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict_proba")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(
-            story_qas, cross_val)
-    except AttributeError:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(story_qas,
-                                                             cross_val,
-                                                             is_pred=True)
+    # print("Fitting pipeline")
+    # try:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict_proba")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(
+    #         story_qas, cross_val)
+    # except AttributeError:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
+    #                                                          cross_val,
+    #                                                          is_pred=True)
 
-    end = time.time()
+    # end = time.time()
 
-    print(f"Time taken: {end - start}")
-    print(f"Recall: {np.mean(recalls)}")
-    print(f"Precision: {np.mean(precisions)}")
-    print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
-    f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
-                                                         np.mean(recalls))
-    print(f"F1: {f1}")
+    # print(f"Time taken: {end - start}")
+    # print(f"Recall: {np.mean(recalls)}")
+    # print(f"Precision: {np.mean(precisions)}")
+    # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
+    # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
+    #                                                      np.mean(recalls))
+    # print(f"F1: {f1}")
 
     # classifier_config_dict['lightgbm.LGBMClassifier'] = {
     #     'boosting_type': ['gbdt', 'dart', 'rf'],
@@ -407,41 +432,17 @@ if __name__ == "__main__":
     #     'colsample_bytree': [0.7, 0.9, 1.0],
     # }
 
-    # tpot = TPOTClassifier(
-    #     generations=20,
-    #     population_size=100,
-    #     cv=5,
-    #     verbosity=3,
-    #     scoring="f1",
-    #     periodic_checkpoint_folder='ml_checkpoints',
-    #     config_dict=config_to_use,
-    #     max_eval_time_mins=5,
-    # )
-    # tpot.fit(train_X, train_y)
-    # print(tpot.score(test_X, test_y))
-    # tpot.export('tpot_pipeline.py')
-    # times_taken = {}
-    # for model_name, model_type in test_models.items():
-    #     print(f"\rTesting {model_name:<60}", end='')
-    #     start = time.time()
-    #     model_type.fit(train_X, train_y)
-    #     end = time.time()
-    #     predictions = model_type.predict(test_X)
-    #     times_taken[model_name] = (end - start, f1_score(test_y, predictions))
-    # print()
-    # sorted_times = sorted(times_taken.items(), key=lambda x: x[1][0])
-    # for model_name, (time_taken, f1) in sorted_times:
-    #     print(f"{model_name:>60} {time_taken:<10.5f} {f1:<10.5f}")
-    # print("\n")
-    # times_taken = {}
-    # for preprocessor_name, preprocessor in test_preprocessors.items():
-    #     print(f"\rTesting preprocessor {preprocessor_name}", end='')
-    #     start = time.time()
-    #     preprocessor.fit(train_X, train_y)
-    #     new = preprocessor.transform(train_X)
-    #     end = time.time()
-    #     times_taken[preprocessor_name] = (end - start)
-    # print()
-    # sorted_times = sorted(times_taken.items(), key=lambda x: x[1])
-    # for preprocessor_name, time_taken in sorted_times:
-    #     print(f"{preprocessor_name:>60} {time_taken:<10.5f}")
+    tpot = TPOTClassifier(
+        generations=20,
+        population_size=100,
+        cv=5,
+        verbosity=3,
+        scoring="f1",
+        periodic_checkpoint_folder='ml_checkpoints',
+        config_dict=config_to_use,
+        max_eval_time_mins=5,
+    )
+    tpot.fit(train_X, train_y)
+    print(tpot.score(test_X, test_y))
+    tpot.export('tpot_pipeline.py')
+    times_taken = {}
