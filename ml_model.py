@@ -153,21 +153,24 @@ class StackAugmenter(BaseEstimator, TransformerMixin):
             (X_transformed, self.estimator.predict(X).reshape(-1, 1)))
 
 
+from ml_model import ValueCount
+from sklearn.decomposition import FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.feature_selection import SelectFwe, f_classif
 from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import BernoulliNB
 from sklearn.pipeline import make_pipeline, make_union
+from sklearn.preprocessing import PolynomialFeatures
 
-# Average CV score on the training set was: 0.4031061456840801
+# Average CV score on the training set was: 0.4042550691071516
 exported_pipeline = make_pipeline(
-    StackAugmenter(estimator=ExtraTreesClassifier(bootstrap=False,
-                                                  criterion="log_loss",
-                                                  max_features=0.3,
-                                                  min_samples_leaf=18,
-                                                  min_samples_split=5,
-                                                  n_estimators=1000)),
-    LinearDiscriminantAnalysis(solver="svd", tol=1e-05))
-
+    ValueCount(value=0),
+    SelectFwe(score_func=f_classif, alpha=0.017),
+    StackAugmenter(estimator=BernoulliNB(alpha=0.1, fit_prior=False)),
+    PolynomialFeatures(degree=2, include_bias=False, interaction_only=False),
+    FastICA(tol=1.0),
+    LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)
+)
 best_model = exported_pipeline
 # best_model = make_pipeline(
 #     StackingEstimator(estimator=BernoulliNB(alpha=0.01, fit_prior=False)),
@@ -176,16 +179,15 @@ best_model = exported_pipeline
 #     LogisticRegression(C=5.0, dual=False, penalty="l2")
 # )
 
-# from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
-# from sklearn.feature_selection import RFE
+# from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+# from sklearn.feature_selection import SelectPercentile, f_classif
 # from sklearn.model_selection import train_test_split
-# from sklearn.naive_bayes import BernoulliNB, GaussianNB
-# from sklearn.pipeline import make_pipeline, make_union
+# from sklearn.pipeline import make_pipeline
+# from sklearn.preprocessing import PolynomialFeatures
 
-# # Average CV score on the training set was: 0.2244102629126123
+# # Average CV score on the training set was: 0.39228978827510036
 # exported_pipeline = make_pipeline(
-#     StackAugmenter(estimator=RandomForestClassifier(bootstrap=True, criterion="entropy", max_features=0.65, min_samples_leaf=19, min_samples_split=10, n_estimators=100)),
-#     RFE(estimator=ExtraTreesClassifier(criterion="gini", max_features=0.25, n_estimators=100), step=0.3),
-#     StackAugmenter(estimator=BernoulliNB(alpha=1.0, fit_prior=True)),
-#     GaussianNB()
+#     PolynomialFeatures(degree=2, include_bias=False, interaction_only=False),
+#     SelectPercentile(score_func=f_classif, percentile=66),
+#     LinearDiscriminantAnalysis(solver="lsqr", tol=0.001)
 # )
