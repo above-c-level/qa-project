@@ -85,6 +85,13 @@ class Bert:
         # return torch.ravel(torch.mean(embedding, dim=1)).detach().numpy()
 
 
+class NLP:
+    """
+    A helper class to load the NLP model from spacy
+    """
+    nlp = spacy.load("en_core_web_md")
+
+
 class Story:
     """
     A class to help out with some important functions in answering questions
@@ -111,7 +118,7 @@ class Story:
             self.story_text = story
             self.story_id = None
         # Count each word in the story
-        self.nlp = spacy.load("en_core_web_sm")
+        self.nlp = NLP.nlp
         self.doc = self.nlp(self.story_text)
         words = set()
         for token in self.doc:
@@ -126,6 +133,11 @@ class Story:
         """
         A list of sentences in the story. Each sentence is a string.
         """
+
+    def __eq__(self, __other: object) -> bool:
+        if isinstance(__other, Story):
+            return self.story_text == __other.story_text
+        return False
 
     def get_sentence_vector(self, sentence: str) -> np.ndarray:
         """
@@ -245,7 +257,6 @@ class Story:
                 best_sentence = story_sentence
         # Return the most similar sentence
         return best_sentence.strip()
-
 
 
 def read_story(directory: str, story_id: str) -> Dict[str, str]:
