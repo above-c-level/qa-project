@@ -16,7 +16,8 @@ from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
 from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    RobustScaler, StandardScaler,
                                    PowerTransformer)
-from helpers import (NLP, Bert, Story, get_story_question_answers, text_f_score)
+from helpers import (NLP, Bert, Story, get_story_question_answers,
+                     text_f_score)
 from sklearn.metrics import accuracy_score
 from sentence_scorer import SentenceScorer
 from scipy.spatial import distance
@@ -150,11 +151,14 @@ def get_balanced_data(
     new_y = np.array(new_y)
     return new_X, new_y
 
+
 '''
 question_vector, word_vec, (answer) -> model_s -> probability of word being start
 question_vector, word_vec, (answer) -> model_e -> probability of word being end
 6, 300 -> model -> [0, 1]
 '''
+
+
 def get_representative_vectors(
     story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     bert: Bert,
@@ -206,12 +210,12 @@ def get_representative_vectors(
 def get_question_vector(question: str) -> np.ndarray:
     """
     Get the question vector for the given question.
-    
+
     Parameters
     ----------
     question : str
         The question to get the question vector for.
-        
+
     Returns
     -------
     np.ndarray
@@ -221,8 +225,15 @@ def get_question_vector(question: str) -> np.ndarray:
     first_word = split_words[0]
     second_word = split_words[1] if len(split_words) > 1 else ""
     question_type = [
-        0, 0, 0, 0, 0, 0,  # Who, What, When, Where, Why, How
-        0, 0, 0,  # much/many/long/old/far, did/does/do, modals
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,  # Who, What, When, Where, Why, How
+        0,
+        0,
+        0,  # much/many/long/old/far, did/does/do, modals
     ]
     if first_word == "who":
         question_type[0] = 1
@@ -236,15 +247,17 @@ def get_question_vector(question: str) -> np.ndarray:
         question_type[4] = 1
     elif first_word == "how":
         question_type[5] = 1
-    if second_word in {"much", "many", "long", "old", 
-                       "far", "large", "deep", "big", 
-                       "high", "wide", "young", "short", 
-                       "tall", "heavy", "light", "small"}:
+    if second_word in {
+            "much", "many", "long", "old", "far", "large", "deep", "big",
+            "high", "wide", "young", "short", "tall", "heavy", "light", "small"
+    }:
         question_type[6] = 1
     elif second_word in {"did", "does", "do"}:
         question_type[7] = 1
-    elif second_word in {"can", "could", "may", "might", "must", "shall", 
-                         "should", "will", "would"}:
+    elif second_word in {
+            "can", "could", "may", "might", "must", "shall", "should", "will",
+            "would"
+    }:
         question_type[8] = 1
     return np.array(question_type)
 
@@ -282,7 +295,7 @@ def create_word_training_data(
     -------
     Tuple[List[np.ndarray], List[int], List[int]]
         The training data for the word prediction model. Contains input data as
-        a list of numpy arrays, followed by a list of class labels indicating 
+        a list of numpy arrays, followed by a list of class labels indicating
         whether the input data is a start word (or not), followed by a list of
         class labels indicating whether the input data is an end word (or not).
     """
@@ -294,7 +307,7 @@ def create_word_training_data(
         split_answers = answers.split("|")
         found_answer = False
         answer_choice = ""
-        for answer in split_answers: 
+        for answer in split_answers:
             if not answer_in_sentence(answer, sentence):
                 continue
             found_answer = True
@@ -302,7 +315,7 @@ def create_word_training_data(
             break
         if not found_answer:
             continue
-        
+
         # Get the start and end indices of the answer in the sentence
         start_index = sentence.index(answer_choice)
         end_index = start_index + len(answer_choice) - 1
@@ -359,7 +372,8 @@ def process_data(
     # Now we have all the embeddings, all the signatures, and knowledge of
     # what the largest signature vector is. We can now create our X and y
     # (input and target output) to train models on
-    for _, question, answer, sentence in tqdm(unpack_stories(story_qas), total=18152):
+    for _, question, answer, sentence in tqdm(unpack_stories(story_qas),
+                                              total=18152):
         # Grab the saved vectors
         question_embedding = seen_embeddings[question]
         question_signature = seen_signatures[question]
@@ -445,7 +459,8 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     story_type_values = []
     question_types = []
 
-    for story, question, _, sentence in tqdm(unpack_stories(story_qas), total=18152):
+    for story, question, _, sentence in tqdm(unpack_stories(story_qas),
+                                             total=18152):
         scores = SentenceScorer.get_sentence_scores(story, question, sentence)
         story_type_values.append(scores)
         question_type = get_question_vector(question)
@@ -482,7 +497,7 @@ if __name__ == "__main__":
         story_qas, sentence_X, sentence_y = collect_data()
 
     cv_model = StratifiedKFold(n_splits=50, shuffle=True)
-    (train_sentence_X, test_sentence_X, train_sentence_y, 
+    (train_sentence_X, test_sentence_X, train_sentence_y,
      test_sentence_y) = train_test_split(sentence_X, sentence_y, test_size=0.2)
 
     word_X, word_start_y, word_end_y = create_word_training_data(story_qas)

@@ -165,8 +165,7 @@ exported_pipeline = make_pipeline(
     VarianceThreshold(threshold=0.005),
     StackAugmenter(estimator=RidgeClassifier(alpha=0.65, tol=0.01)),
     PolynomialFeatures(degree=2, include_bias=False, interaction_only=True),
-    LinearDiscriminantAnalysis(solver="svd", tol=0.01)
-)
+    LinearDiscriminantAnalysis(solver="svd", tol=0.01))
 best_model = exported_pipeline
 # best_model = make_pipeline(
 #     StackingEstimator(estimator=BernoulliNB(alpha=0.01, fit_prior=False)),

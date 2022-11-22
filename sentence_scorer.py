@@ -305,8 +305,8 @@ class SentenceScorer:
     def get_sentence_scores(story: Story, question: str,
                             sentence: str) -> Tuple[int, int, int, int, int]:
         """
-        Collects the data from the stories and question-answer pairs, and returns
-        them processed into X and y as the input and target output.
+        Collects the data from the stories and question-answer pairs, and
+        returns them processed into X and y as the input and target output.
 
         Returns
         -------

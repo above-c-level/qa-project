@@ -103,7 +103,7 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         print(f"QuestionID: {question_id}")
         # Print the question itself
         question_text = question_dict["Question"]
-        
+
         #print(f"Question: {question_text}")
         # Get question and run it through our answer function with the story
 
@@ -114,10 +114,11 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         # print(f"Difficulty: {difficulty}")
         print()
 
+
 def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     """
-    Creates a dictionary of n-grams from the beginnings of the questions, 
-    and returns a dictionary mapping each starting n-gram to the number of 
+    Creates a dictionary of n-grams from the beginnings of the questions,
+    and returns a dictionary mapping each starting n-gram to the number of
     times it appears in the questions.
 
     Parameters
@@ -137,7 +138,7 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     for question_dict in questions:
         question_text = question_dict["Question"].lower()
         words = question_text.split()
-        sliced = words[0 : 0 + n]
+        sliced = words[0:0 + n]
         if sliced[0] not in {"how"}:
             continue
         n_gram = " ".join(sliced)
@@ -146,6 +147,7 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
         else:
             n_gram_dict[n_gram] = 1
     return n_gram_dict
+
 
 if __name__ == "__main__":
     start = time.time()
@@ -157,7 +159,7 @@ if __name__ == "__main__":
         lines = lines[1:]
     n_gram_total = {}
     for line in lines:
-        story_id = line .strip()
+        story_id = line.strip()
         try:
             story_dict = read_story(directory, story_id)
             questions = read_questions(directory, story_id)

@@ -14,6 +14,8 @@ from tqdm import tqdm
 story_qas = get_story_question_answers('devset-official')
 
 scores = []
+
+
 def get_best_sentence(answer_str: str, story_object: Story) -> str:
     """
     Returns the best sentence from the story that answers the question.
@@ -35,6 +37,7 @@ def get_best_sentence(answer_str: str, story_object: Story) -> str:
             best_sentence = sentence
             best_score = score
     return best_sentence
+
 
 for story_dict, question_answer_pairs in tqdm(story_qas):
     story_object = Story(story_dict)
