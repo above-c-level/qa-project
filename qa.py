@@ -147,6 +147,39 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
                 n_gram_dict[n_gram] = 1
     return n_gram_dict
 
+# def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
+#     """
+#     Creates a dictionary of n-grams from the questions, and returns a dictionary
+#     mapping each n-gram to the number of times it appears in the questions.
+
+#     Parameters
+#     ----------
+#     questions : List[Dict[str, str]]
+#         The list of question dictionaries.
+#     n : int, optional
+#         The length of the n-grams, by default 2
+
+#     Returns
+#     -------
+#     Dict[str, int]
+#         The dictionary mapping each n-gram to the number of times it appears in
+#         the questions.
+#     """
+#     n_gram_dict = {}
+#     for question_dict in questions:
+#         question_text = question_dict["Question"]
+#         words = question_text.split()
+#         for i in range(len(words) - n + 1):
+#             n_gram = " ".join(words[i:i + n])
+#             if "how" not in n_gram:
+#                 continue
+#             if n_gram in n_gram_dict:
+#                 n_gram_dict[n_gram] += 1
+#             else:
+#                 n_gram_dict[n_gram] = 1
+#     return n_gram_dict
+
+
 if __name__ == "__main__":
     start = time.time()
     stories = 0
@@ -155,20 +188,21 @@ if __name__ == "__main__":
         lines = f.readlines()
         directory = lines[0].strip()
         lines = lines[1:]
-    n_gram_total = {}
+    # n_gram_total = {}
     for line in lines:
-        story_id = line.strip()
+        story_id = line .strip()
         try:
             story_dict = read_story(directory, story_id)
             questions = read_questions(directory, story_id)
             story_object = Story(story_dict)
-            n_gram_dict = n_gram(questions)
-            for key in n_gram_dict:
-                if key in n_gram_total:
-                    n_gram_total[key] += n_gram_dict[key]
-                else:
-                    n_gram_total[key] = n_gram_dict[key]
-            # answer_questions(story_object, questions)
+
+            # n_gram_dict = n_gram(questions)
+            # for key in n_gram_dict:
+            #     if key in n_gram_total:
+            #         n_gram_total[key] += n_gram_dict[key]
+            #     else:
+            #         n_gram_total[key] = n_gram_dict[key]
+            answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")

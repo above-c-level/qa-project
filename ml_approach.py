@@ -253,7 +253,6 @@ def process_data(
     sentence_embeddings: List[np.ndarray] = []
     question_signatures: List[np.ndarray] = []
     sentence_signatures: List[np.ndarray] = []
-    question_types: List[np.ndarray] = []
     # Now we have all the embeddings, all the signatures, and knowledge of
     # what the largest signature vector is. We can now create our X and y
     # (input and target output) to train models on
@@ -341,33 +340,16 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     signature_distances = get_distances(q_sigs, sent_sigs)
 
     story_type_values = []
-    question_types: List[List[int]] = []
-
     for story, question, _, sentence in tqdm(unpack_stories(story_qas), total=18152):
         scores = SentenceScorer.get_sentence_scores(story, question, sentence)
         story_type_values.append(scores)
-        first_word = question.split()[0].lower()
-        question_type = [0, 0, 0, 0, 0, 0]
-        if first_word == "who":
-            question_type[0] = 1
-        elif first_word == "what":
-            question_type[1] = 1
-        elif first_word == "when":
-            question_type[2] = 1
-        elif first_word == "where":
-            question_type[3] = 1
-        elif first_word == "why":
-            question_type[4] = 1
-        elif first_word == "how":
-            question_type[5] = 1
-        question_types.append(question_type)
 
     story_type_values = np.array(story_type_values)
+    question_types = np.array(question_types)
     X = np.concatenate((
         embedding_distances,
         signature_distances,
         story_type_values,
-        question_types,
     ),
                        axis=1)
 
@@ -391,7 +373,7 @@ if __name__ == "__main__":
         print("No stories.pkl found, generating")
         story_qas, X, y = collect_data()
 
-    cv_model = StratifiedKFold(n_splits=10, shuffle=True)
+    cv_model = StratifiedKFold(n_splits=50, shuffle=True)
     train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2)
     # n_fits = fit_n_models(100, X, y, 60 * 5, checkpoint_folder="random_ml")
     # Sort n_fits by test score
@@ -402,38 +384,38 @@ if __name__ == "__main__":
     # all_results = {}
     # results = []
     start = time.time()
-    # pipeline = best_model
+    pipeline = best_model
 
-    # print("Fitting pipeline")
-    # try:
-    #     cross_val = cross_val_predict(pipeline,
-    #                                   X,
-    #                                   y,
-    #                                   cv=cv_model,
-    #                                   method="predict_proba")
-    #     cross_val = np.array(cross_val)
-    #     recalls, precisions, f_scores = get_scores_from_prob(
-    #         story_qas, cross_val)
-    # except AttributeError:
-    #     cross_val = cross_val_predict(pipeline,
-    #                                   X,
-    #                                   y,
-    #                                   cv=cv_model,
-    #                                   method="predict")
-    #     cross_val = np.array(cross_val)
-    #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
-    #                                                          cross_val,
-    #                                                          is_pred=True)
+    print("Fitting pipeline")
+    try:
+        cross_val = cross_val_predict(pipeline,
+                                      X,
+                                      y,
+                                      cv=cv_model,
+                                      method="predict_proba")
+        cross_val = np.array(cross_val)
+        recalls, precisions, f_scores = get_scores_from_prob(
+            story_qas, cross_val)
+    except AttributeError:
+        cross_val = cross_val_predict(pipeline,
+                                      X,
+                                      y,
+                                      cv=cv_model,
+                                      method="predict")
+        cross_val = np.array(cross_val)
+        recalls, precisions, f_scores = get_scores_from_prob(story_qas,
+                                                             cross_val,
+                                                             is_pred=True)
 
-    # end = time.time()
+    end = time.time()
 
-    # print(f"Time taken: {end - start}")
-    # print(f"Recall: {np.mean(recalls)}")
-    # print(f"Precision: {np.mean(precisions)}")
-    # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
-    # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
-    #                                                      np.mean(recalls))
-    # print(f"F1: {f1}")
+    print(f"Time taken: {end - start}")
+    print(f"Recall: {np.mean(recalls)}")
+    print(f"Precision: {np.mean(precisions)}")
+    print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
+    f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
+                                                         np.mean(recalls))
+    print(f"F1: {f1}")
 
     # classifier_config_dict['lightgbm.LGBMClassifier'] = {
     #     'boosting_type': ['gbdt', 'dart', 'rf'],
@@ -450,17 +432,17 @@ if __name__ == "__main__":
     #     'colsample_bytree': [0.7, 0.9, 1.0],
     # }
 
-    tpot = TPOTClassifier(
-        generations=20,
-        population_size=100,
-        cv=5,
-        verbosity=3,
-        scoring="f1",
-        periodic_checkpoint_folder='ml_checkpoints',
-        config_dict=config_to_use,
-        max_eval_time_mins=5,
-    )
-    tpot.fit(train_X, train_y)
-    print(tpot.score(test_X, test_y))
-    tpot.export('tpot_pipeline.py')
-    times_taken = {}
+    # tpot = TPOTClassifier(
+    #     generations=20,
+    #     population_size=100,
+    #     cv=5,
+    #     verbosity=3,
+    #     scoring="f1",
+    #     periodic_checkpoint_folder='ml_checkpoints',
+    #     config_dict=config_to_use,
+    #     max_eval_time_mins=5,
+    # )
+    # tpot.fit(train_X, train_y)
+    # print(tpot.score(test_X, test_y))
+    # tpot.export('tpot_pipeline.py')
+    # times_taken = {}

@@ -282,78 +282,24 @@ class SentenceScorer:
 
         return score
 
-    @staticmethod
-    def get_how_score(question: str, sentence: str) -> int:
-        """
-        Calculates the who score from a sentence based on a question.
+    # @staticmethod
+    # def get_how_score( question: str, sentence: str) -> int:
+    #     """
+    #     Calculates the who score from a sentence based on a question.
 
-        Parameters
-        ---------
-        question: str
-            The question
-        sentence: str
-            The sentence
+    #     Parameters
+    #     ---------
+    #     question: str
+    #         The question
+    #     sentence: str
+    #         The sentence
 
-        Returns
-        -------
-        int
-            The resulting score
-
-        Examples
-        -----
-        28 how many -> QUANTITY, CARDINAL
-        16 how did -> ?
-        12 how long -> QUANTITY,TIME,DATE
-        10 how much -> MONEY,QUANTITY
-        7 how does -> ?
-        5 how old -> ?
-        4 how do -> ?
-        3 how would -> ?
-        3 how far -> ?
-        3 how is -> ?
-        3 how will -> ?
-
-        """
-        score = 0
-        score += SentenceScorer.word_match(question, sentence)
-        s_matched = NLP.nlp(sentence).ents
-        # q_matched = NLP.nlp(question).ents
-        # print("q_matched:")
-        # for token in q_matched:
-        #     print(f"  {token.label_:<12} {token.text}")
-        # print("s_matched:")
-        # for token in s_matched:
-        #     print(f"  {token.label_:<12} {token.text}")
-        lower_q = question.lower().split()
-        lower_s = sentence.lower().split()
-
-        if ("did" in lower_q and any(token in {"by", "with", "using", "used"}
-                                     for token in lower_s)):
-            print(question)
-            score += SentenceScorer.confident
-
-        if "long" in lower_q and any(token.label == "TIME"
-                                     for token in s_matched):
-            score += SentenceScorer.confident
-
-        if "much" in lower_q and any(token.label == "MONEY"
-                                     for token in s_matched):
-            score += SentenceScorer.confident
-
-        if ({"long", "much", "many"} in lower_q
-                and any(token.label == "QUANTITY" for token in s_matched)):
-            score += SentenceScorer.good_clue
-
-        if any(token.label == "DATE" for token in s_matched):
-            score += SentenceScorer.good_clue
-
-        if any(token.label == "PERCENT" for token in s_matched):
-            score += SentenceScorer.good_clue
-
-        if any(token.label == "CARDINAL" for token in s_matched):  #tall
-            score += SentenceScorer.good_clue
-
-        return score
+    #     Returns
+    #     -------
+    #     int
+    #         The resulting score
+    #     """
+    #     return 0
 
     @staticmethod
     def get_sentence_scores(story: Story, question: str,
@@ -373,10 +319,5 @@ class SentenceScorer:
         when_score = SentenceScorer.get_when_score(question, sentence)
         where_score = SentenceScorer.get_where_score(question, sentence)
         why_score = SentenceScorer.get_why_score(question, sentence)
-        how_score = SentenceScorer.get_how_score(question, sentence)
+        #how_score = SentenceScorer.get_how_score(question, sentence)
         return who_score, what_score, when_score, where_score, why_score
-
-
-question = "How did they cross the river"
-sentence = "They crossed the river using a boat."
-SentenceScorer.get_how_score(question, sentence)
