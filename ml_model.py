@@ -153,23 +153,19 @@ class StackAugmenter(BaseEstimator, TransformerMixin):
             (X_transformed, self.estimator.predict(X).reshape(-1, 1)))
 
 
-from ml_model import ValueCount
-from sklearn.decomposition import FastICA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.feature_selection import SelectFwe, f_classif
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.linear_model import RidgeClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import BernoulliNB
 from sklearn.pipeline import make_pipeline, make_union
 from sklearn.preprocessing import PolynomialFeatures
 
-# Average CV score on the training set was: 0.4042550691071516
+# Average CV score on the training set was: 0.4422745479321074
 exported_pipeline = make_pipeline(
-    ValueCount(value=0),
-    SelectFwe(score_func=f_classif, alpha=0.017),
-    StackAugmenter(estimator=BernoulliNB(alpha=0.1, fit_prior=False)),
-    PolynomialFeatures(degree=2, include_bias=False, interaction_only=False),
-    FastICA(tol=1.0),
-    LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)
+    VarianceThreshold(threshold=0.005),
+    StackAugmenter(estimator=RidgeClassifier(alpha=0.65, tol=0.01)),
+    PolynomialFeatures(degree=2, include_bias=False, interaction_only=True),
+    LinearDiscriminantAnalysis(solver="svd", tol=0.01)
 )
 best_model = exported_pipeline
 # best_model = make_pipeline(
