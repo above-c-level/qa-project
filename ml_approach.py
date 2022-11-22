@@ -253,6 +253,7 @@ def process_data(
     sentence_embeddings: List[np.ndarray] = []
     question_signatures: List[np.ndarray] = []
     sentence_signatures: List[np.ndarray] = []
+    question_types: List[np.ndarray] = []
     # Now we have all the embeddings, all the signatures, and knowledge of
     # what the largest signature vector is. We can now create our X and y
     # (input and target output) to train models on
@@ -340,16 +341,33 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     signature_distances = get_distances(q_sigs, sent_sigs)
 
     story_type_values = []
+    question_types: List[List[int]] = []
 
     for story, question, _, sentence in tqdm(unpack_stories(story_qas), total=18152):
         scores = SentenceScorer.get_sentence_scores(story, question, sentence)
         story_type_values.append(scores)
+        first_word = question.split()[0].lower()
+        question_type = [0, 0, 0, 0, 0, 0]
+        if first_word == "who":
+            question_type[0] = 1
+        elif first_word == "what":
+            question_type[1] = 1
+        elif first_word == "when":
+            question_type[2] = 1
+        elif first_word == "where":
+            question_type[3] = 1
+        elif first_word == "why":
+            question_type[4] = 1
+        elif first_word == "how":
+            question_type[5] = 1
+        question_types.append(question_type)
 
     story_type_values = np.array(story_type_values)
     X = np.concatenate((
         embedding_distances,
         signature_distances,
         story_type_values,
+        question_types,
     ),
                        axis=1)
 

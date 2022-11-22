@@ -9,7 +9,7 @@ from typing import Dict, List, Set, Tuple
 from helpers import Bert, read_questions, read_story, Story
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 import numpy as np
-
+from pprint import pprint
 
 TIMING = False
 
@@ -103,7 +103,8 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         print(f"QuestionID: {question_id}")
         # Print the question itself
         question_text = question_dict["Question"]
-        # print(f"Question: {question_text}")
+        
+        #print(f"Question: {question_text}")
         # Get question and run it through our answer function with the story
 
         answer = find_answer(question_text, story)
@@ -113,6 +114,38 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
         # print(f"Difficulty: {difficulty}")
         print()
 
+def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
+    """
+    Creates a dictionary of n-grams from the questions, and returns a dictionary
+    mapping each n-gram to the number of times it appears in the questions.
+
+    Parameters
+    ----------
+    questions : List[Dict[str, str]]
+        The list of question dictionaries.
+    n : int, optional
+        The length of the n-grams, by default 2
+
+    Returns
+    -------
+    Dict[str, int]
+        The dictionary mapping each n-gram to the number of times it appears in
+        the questions.
+    """
+    n_gram_dict = {}
+    for question_dict in questions:
+        question_text = question_dict["Question"].lower()
+        words = question_text.split()
+        for i in range(len(words) - n + 1):
+            sliced = words[i : i + n]
+            if sliced[0] not in {"how"}:
+                continue
+            n_gram = " ".join(sliced)
+            if n_gram in n_gram_dict:
+                n_gram_dict[n_gram] += 1
+            else:
+                n_gram_dict[n_gram] = 1
+    return n_gram_dict
 
 if __name__ == "__main__":
     start = time.time()
@@ -122,13 +155,20 @@ if __name__ == "__main__":
         lines = f.readlines()
         directory = lines[0].strip()
         lines = lines[1:]
+    n_gram_total = {}
     for line in lines:
         story_id = line.strip()
         try:
             story_dict = read_story(directory, story_id)
             questions = read_questions(directory, story_id)
             story_object = Story(story_dict)
-            answer_questions(story_object, questions)
+            n_gram_dict = n_gram(questions)
+            for key in n_gram_dict:
+                if key in n_gram_total:
+                    n_gram_total[key] += n_gram_dict[key]
+                else:
+                    n_gram_total[key] = n_gram_dict[key]
+            # answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")
@@ -140,3 +180,8 @@ if __name__ == "__main__":
         time_per_story = total_time / stories
         print(f"Took {time_per_story} seconds on average to answer a story")
         print(f"Took {total_time} seconds to answer {stories} stories")
+    # Sort the n-grams by frequency
+    n_gram_total = sorted(n_gram_total.items(),
+                          key=lambda x: x[1],
+                          reverse=True)
+    pprint(n_gram_total)
