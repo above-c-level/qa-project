@@ -16,7 +16,7 @@ from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
 from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    RobustScaler, StandardScaler,
                                    PowerTransformer)
-from helpers import (Bert, Story, get_story_question_answers, text_f_score)
+from helpers import (NLP, Bert, Story, get_story_question_answers, text_f_score)
 from sklearn.metrics import accuracy_score
 from sentence_scorer import SentenceScorer
 from scipy.spatial import distance
@@ -30,6 +30,7 @@ from tpot import TPOTClassifier
 from pprint import pprint
 from pathlib import Path
 from config_dicts import classifier_config_dict_extra_fast as config_to_use
+from functools import lru_cache
 
 warnings.filterwarnings("ignore")
 
@@ -149,7 +150,11 @@ def get_balanced_data(
     new_y = np.array(new_y)
     return new_X, new_y
 
-
+'''
+question_vector, word_vec, (answer) -> model_s -> probability of word being start
+question_vector, word_vec, (answer) -> model_e -> probability of word being end
+6, 300 -> model -> [0, 1]
+'''
 def get_representative_vectors(
     story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     bert: Bert,
@@ -197,6 +202,53 @@ def get_representative_vectors(
     return seen_embeddings, seen_signatures
 
 
+@lru_cache(maxsize=None)
+def get_question_vector(question: str) -> np.ndarray:
+    """
+    Get the question vector for the given question.
+    
+    Parameters
+    ----------
+    question : str
+        The question to get the question vector for.
+        
+    Returns
+    -------
+    np.ndarray
+        The question vector for the given question.
+    """
+    split_words = question.lower().split()
+    first_word = split_words[0]
+    second_word = split_words[1] if len(split_words) > 1 else ""
+    question_type = [
+        0, 0, 0, 0, 0, 0,  # Who, What, When, Where, Why, How
+        0, 0, 0,  # much/many/long/old/far, did/does/do, modals
+    ]
+    if first_word == "who":
+        question_type[0] = 1
+    elif first_word == "what":
+        question_type[1] = 1
+    elif first_word == "when":
+        question_type[2] = 1
+    elif first_word == "where":
+        question_type[3] = 1
+    elif first_word == "why":
+        question_type[4] = 1
+    elif first_word == "how":
+        question_type[5] = 1
+    if second_word in {"much", "many", "long", "old", 
+                       "far", "large", "deep", "big", 
+                       "high", "wide", "young", "short", 
+                       "tall", "heavy", "light", "small"}:
+        question_type[6] = 1
+    elif second_word in {"did", "does", "do"}:
+        question_type[7] = 1
+    elif second_word in {"can", "could", "may", "might", "must", "shall", 
+                         "should", "will", "would"}:
+        question_type[8] = 1
+    return np.array(question_type)
+
+
 def unpack_stories(
     story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
 ) -> Generator[Tuple[Story, str, str, str], None, None]:
@@ -218,6 +270,57 @@ def unpack_stories(
         for question, answer in question_answer_pairs:
             for sentence in story_object.sentences:
                 yield story_object, question, answer, sentence
+
+
+def create_word_training_data(
+    story_qas: List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Create the training data for the word prediction model.
+
+    Returns
+    -------
+    Tuple[List[np.ndarray], List[int], List[int]]
+        The training data for the word prediction model. Contains input data as
+        a list of numpy arrays, followed by a list of class labels indicating 
+        whether the input data is a start word (or not), followed by a list of
+        class labels indicating whether the input data is an end word (or not).
+    """
+    X = []
+    start_y = []
+    end_y = []
+    for _, question, answers, sentence in unpack_stories(story_qas):
+        # Bar indicates multiple answers
+        split_answers = answers.split("|")
+        found_answer = False
+        answer_choice = ""
+        for answer in split_answers: 
+            if not answer_in_sentence(answer, sentence):
+                continue
+            found_answer = True
+            answer_choice = answer
+            break
+        if not found_answer:
+            continue
+        
+        # Get the start and end indices of the answer in the sentence
+        start_index = sentence.index(answer_choice)
+        end_index = start_index + len(answer_choice) - 1
+        # Get the words in the sentence
+        words = sentence.split()
+        # Get the question vector
+        question_vector = get_question_vector(question)
+        for index, word in enumerate(words):
+            word_vec = NLP.word_vector(word)
+            # Get the input vector
+            input_vec = np.concatenate((question_vector, word_vec))
+            X.append(input_vec)
+            # Get the start and end labels
+            start_label = 1 if index == start_index else 0
+            end_label = 1 if index == end_index else 0
+            start_y.append(start_label)
+            end_y.append(end_label)
+    return np.array(X), np.array(start_y), np.array(end_y)
 
 
 def process_data(
@@ -340,9 +443,13 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
     signature_distances = get_distances(q_sigs, sent_sigs)
 
     story_type_values = []
+    question_types = []
+
     for story, question, _, sentence in tqdm(unpack_stories(story_qas), total=18152):
         scores = SentenceScorer.get_sentence_scores(story, question, sentence)
         story_type_values.append(scores)
+        question_type = get_question_vector(question)
+        question_types.append(question_type)
 
     story_type_values = np.array(story_type_values)
     question_types = np.array(question_types)
@@ -350,6 +457,7 @@ def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
         embedding_distances,
         signature_distances,
         story_type_values,
+        question_types,
     ),
                        axis=1)
 
@@ -368,13 +476,20 @@ if __name__ == "__main__":
         print("Loading stories from pickle file")
         with open("data/stories.pkl", "rb") as f:
             stories = pickle.load(f)
-            story_qas, X, y = stories
+            story_qas, sentence_X, sentence_y = stories
     else:
         print("No stories.pkl found, generating")
-        story_qas, X, y = collect_data()
+        story_qas, sentence_X, sentence_y = collect_data()
 
     cv_model = StratifiedKFold(n_splits=50, shuffle=True)
-    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.2)
+    (train_sentence_X, test_sentence_X, train_sentence_y, 
+     test_sentence_y) = train_test_split(sentence_X, sentence_y, test_size=0.2)
+
+    word_X, word_start_y, word_end_y = create_word_training_data(story_qas)
+    (train_word_start_X, test_word_start_X, train_word_start_y,
+     test_word_start_y) = train_test_split(word_X, word_start_y, test_size=0.2)
+    (train_word_end_X, test_word_end_X, train_word_end_y,
+     test_word_end_y) = train_test_split(word_X, word_end_y, test_size=0.2)
     # n_fits = fit_n_models(100, X, y, 60 * 5, checkpoint_folder="random_ml")
     # Sort n_fits by test score
     # pprint(n_fits.sort(key=lambda x: x[0], reverse=True))
@@ -384,38 +499,38 @@ if __name__ == "__main__":
     # all_results = {}
     # results = []
     start = time.time()
-    pipeline = best_model
+    # pipeline = best_model
 
-    print("Fitting pipeline")
-    try:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict_proba")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(
-            story_qas, cross_val)
-    except AttributeError:
-        cross_val = cross_val_predict(pipeline,
-                                      X,
-                                      y,
-                                      cv=cv_model,
-                                      method="predict")
-        cross_val = np.array(cross_val)
-        recalls, precisions, f_scores = get_scores_from_prob(story_qas,
-                                                             cross_val,
-                                                             is_pred=True)
+    # print("Fitting pipeline")
+    # try:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict_proba")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(
+    #         story_qas, cross_val)
+    # except AttributeError:
+    #     cross_val = cross_val_predict(pipeline,
+    #                                   X,
+    #                                   y,
+    #                                   cv=cv_model,
+    #                                   method="predict")
+    #     cross_val = np.array(cross_val)
+    #     recalls, precisions, f_scores = get_scores_from_prob(story_qas,
+    #                                                          cross_val,
+    #                                                          is_pred=True)
 
-    end = time.time()
+    # end = time.time()
 
-    print(f"Time taken: {end - start}")
-    print(f"Recall: {np.mean(recalls)}")
-    print(f"Precision: {np.mean(precisions)}")
-    print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
-    f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
-                                                         np.mean(recalls))
-    print(f"F1: {f1}")
+    # print(f"Time taken: {end - start}")
+    # print(f"Recall: {np.mean(recalls)}")
+    # print(f"Precision: {np.mean(precisions)}")
+    # print(f"Accuracy: {accuracy_score(y, np.argmax(cross_val, axis=1))}")
+    # f1 = 2 * (np.mean(precisions) * np.mean(recalls)) / (np.mean(precisions) +
+    #                                                      np.mean(recalls))
+    # print(f"F1: {f1}")
 
     # classifier_config_dict['lightgbm.LGBMClassifier'] = {
     #     'boosting_type': ['gbdt', 'dart', 'rf'],
@@ -432,17 +547,16 @@ if __name__ == "__main__":
     #     'colsample_bytree': [0.7, 0.9, 1.0],
     # }
 
-    # tpot = TPOTClassifier(
-    #     generations=20,
-    #     population_size=100,
-    #     cv=5,
-    #     verbosity=3,
-    #     scoring="f1",
-    #     periodic_checkpoint_folder='ml_checkpoints',
-    #     config_dict=config_to_use,
-    #     max_eval_time_mins=5,
-    # )
-    # tpot.fit(train_X, train_y)
-    # print(tpot.score(test_X, test_y))
-    # tpot.export('tpot_pipeline.py')
-    # times_taken = {}
+    tpot = TPOTClassifier(
+        generations=20,
+        population_size=100,
+        cv=5,
+        verbosity=3,
+        scoring="f1",
+        periodic_checkpoint_folder='ml_checkpoints',
+        config_dict=config_to_use,
+        max_eval_time_mins=5,
+    )
+    tpot.fit(train_word_start_X, train_word_start_y)
+    print(tpot.score(test_word_start_X, test_word_start_y))
+    tpot.export('tpot_pipeline.py')

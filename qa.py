@@ -116,8 +116,9 @@ def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
 
 def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     """
-    Creates a dictionary of n-grams from the questions, and returns a dictionary
-    mapping each n-gram to the number of times it appears in the questions.
+    Creates a dictionary of n-grams from the beginnings of the questions, 
+    and returns a dictionary mapping each starting n-gram to the number of 
+    times it appears in the questions.
 
     Parameters
     ----------
@@ -129,56 +130,22 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     Returns
     -------
     Dict[str, int]
-        The dictionary mapping each n-gram to the number of times it appears in
-        the questions.
+        A dictionary mapping each starting n-gram to the number of times it
+        appears in the questions.
     """
     n_gram_dict = {}
     for question_dict in questions:
         question_text = question_dict["Question"].lower()
         words = question_text.split()
-        for i in range(len(words) - n + 1):
-            sliced = words[i : i + n]
-            if sliced[0] not in {"how"}:
-                continue
-            n_gram = " ".join(sliced)
-            if n_gram in n_gram_dict:
-                n_gram_dict[n_gram] += 1
-            else:
-                n_gram_dict[n_gram] = 1
+        sliced = words[0 : 0 + n]
+        if sliced[0] not in {"how"}:
+            continue
+        n_gram = " ".join(sliced)
+        if n_gram in n_gram_dict:
+            n_gram_dict[n_gram] += 1
+        else:
+            n_gram_dict[n_gram] = 1
     return n_gram_dict
-
-# def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
-#     """
-#     Creates a dictionary of n-grams from the questions, and returns a dictionary
-#     mapping each n-gram to the number of times it appears in the questions.
-
-#     Parameters
-#     ----------
-#     questions : List[Dict[str, str]]
-#         The list of question dictionaries.
-#     n : int, optional
-#         The length of the n-grams, by default 2
-
-#     Returns
-#     -------
-#     Dict[str, int]
-#         The dictionary mapping each n-gram to the number of times it appears in
-#         the questions.
-#     """
-#     n_gram_dict = {}
-#     for question_dict in questions:
-#         question_text = question_dict["Question"]
-#         words = question_text.split()
-#         for i in range(len(words) - n + 1):
-#             n_gram = " ".join(words[i:i + n])
-#             if "how" not in n_gram:
-#                 continue
-#             if n_gram in n_gram_dict:
-#                 n_gram_dict[n_gram] += 1
-#             else:
-#                 n_gram_dict[n_gram] = 1
-#     return n_gram_dict
-
 
 if __name__ == "__main__":
     start = time.time()
@@ -188,7 +155,7 @@ if __name__ == "__main__":
         lines = f.readlines()
         directory = lines[0].strip()
         lines = lines[1:]
-    # n_gram_total = {}
+    n_gram_total = {}
     for line in lines:
         story_id = line .strip()
         try:
@@ -202,7 +169,7 @@ if __name__ == "__main__":
             #         n_gram_total[key] += n_gram_dict[key]
             #     else:
             #         n_gram_total[key] = n_gram_dict[key]
-            answer_questions(story_object, questions)
+            # answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")
@@ -215,7 +182,7 @@ if __name__ == "__main__":
         print(f"Took {time_per_story} seconds on average to answer a story")
         print(f"Took {total_time} seconds to answer {stories} stories")
     # Sort the n-grams by frequency
-    n_gram_total = sorted(n_gram_total.items(),
-                          key=lambda x: x[1],
-                          reverse=True)
-    pprint(n_gram_total)
+    # n_gram_total = sorted(n_gram_total.items(),
+    #                       key=lambda x: x[1],
+    #                       reverse=False)
+    # pprint(n_gram_total)

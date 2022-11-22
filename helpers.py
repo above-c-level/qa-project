@@ -11,6 +11,7 @@ import torch
 from numpy.typing import ArrayLike
 from sklearn.model_selection import train_test_split
 from transformers import AutoModel, AutoTokenizer
+from functools import lru_cache
 
 
 def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
@@ -90,6 +91,24 @@ class NLP:
     A helper class to load the NLP model from spacy
     """
     nlp = spacy.load("en_core_web_md")
+
+    @lru_cache(maxsize=1000)
+    @staticmethod
+    def word_vector(word: str) -> np.ndarray:
+        """
+        Get the vector representation of a word.
+
+        Parameters
+        ----------
+        word : str
+            The word to vectorize.
+
+        Returns
+        -------
+        np.ndarray
+            The vector representation of the word.
+        """
+        return np.array(NLP.nlp(word).vector)
 
 
 class Story:
