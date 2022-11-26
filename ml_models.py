@@ -3,22 +3,17 @@ from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import ArrayLike
 from sklearn.base import BaseEstimator, TransformerMixin, is_classifier
-from sklearn.decomposition import PCA
-from sklearn.ensemble import (AdaBoostClassifier, BaggingClassifier,
-                              StackingClassifier, VotingClassifier)
+from sklearn.discriminant_analysis import (LinearDiscriminantAnalysis,
+                                           QuadraticDiscriminantAnalysis)
 from sklearn.exceptions import NotFittedError
-from sklearn.feature_selection import (SelectFdr, SelectFpr, SelectKBest,
-                                       SelectPercentile, VarianceThreshold,
-                                       chi2, f_classif, mutual_info_classif)
-from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.model_selection import cross_val_predict, train_test_split
-from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
-from sklearn.neighbors import KNeighborsClassifier, RadiusNeighborsRegressor
-from sklearn.neural_network import MLPRegressor
-from sklearn.pipeline import make_pipeline, make_union
-from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
-                                   PolynomialFeatures, PowerTransformer,
-                                   RobustScaler, StandardScaler)
+from sklearn.feature_selection import (SelectPercentile, f_classif)
+from sklearn.linear_model import SGDClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import (MaxAbsScaler, PolynomialFeatures,
+                                   PowerTransformer, RobustScaler,
+                                   StandardScaler)
+from sklearn.svm import LinearSVC
 from sklearn.utils import check_array
 
 
@@ -152,26 +147,6 @@ class StackAugmenter(BaseEstimator, TransformerMixin):
             (X_transformed, self.estimator.predict(X).reshape(-1, 1)))
 
 
-import numpy as np
-import pandas as pd
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
-from sklearn.linear_model import SGDClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import make_pipeline, make_union
-from sklearn.preprocessing import MaxAbsScaler, PowerTransformer, RobustScaler
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.linear_model import RidgeClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import make_pipeline, make_union
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.feature_selection import SelectPercentile, f_classif
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
-from sklearn.pipeline import make_pipeline, make_union
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
-from sklearn.svm import LinearSVC
-
 # Average CV score on the training set was: 0.7928506104371915
 sentence_model = make_pipeline(
     StackAugmenter(estimator=GaussianNB(var_smoothing=1e-09)),
@@ -188,6 +163,23 @@ sentence_model = make_pipeline(
 
 # Average CV score on the training set was: 0.802253989848753
 end_word_model = make_pipeline(
+    RobustScaler(),
+    StackAugmenter(
+        estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
+    StackAugmenter(estimator=SGDClassifier(alpha=0.01,
+                                           eta0=0.001,
+                                           fit_intercept=True,
+                                           l1_ratio=0.7,
+                                           learning_rate="optimal",
+                                           loss="squared_error",
+                                           penalty="elasticnet",
+                                           power_t=0.1)),
+    MaxAbsScaler(),
+    PowerTransformer(),
+    QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
+)
+# Average CV score on the training set was: 0.802253989848753
+start_word_model = make_pipeline(
     RobustScaler(),
     StackAugmenter(
         estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),

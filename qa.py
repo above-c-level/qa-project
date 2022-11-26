@@ -13,17 +13,9 @@ import numpy as np
 from pprint import pprint
 from ml_approach import ml_friendly_sentences, ml_friendly_words
 from sklearn.base import BaseEstimator, ClassifierMixin
+from qa_controller import QA
 
 TIMING = False
-
-
-class SKLearnModel(Protocol):
-
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        ...
-
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        ...
 
 
 def parse_args():
@@ -77,82 +69,6 @@ is 20 kilometres away.
     return inputfile
 
 
-def find_answer(question: str, story: Story, sentence_model: SKLearnModel,
-                word_start_model: SKLearnModel,
-                word_end_model: SKLearnModel) -> str:
-    """
-    Compare the question with the story, and return the best answer.
-
-    Parameters
-    ----------
-    question : str
-        The current question being asked.
-    story : Story
-        The saved story.
-    sentence_model : SKLearnModel
-        The model used to predict the sentence.
-    word_start_model : SKLearnModel
-        The model used to predict the start of the answer.
-    word_end_model : SKLearnModel
-        The model used to predict the end of the answer.
-
-    Returns
-    -------
-    str
-        The best response to the given question.
-    """
-    sent_predicts_in = ml_friendly_sentences(story, question)
-    best_answer = ""
-    best_score = 0
-    for sent_pred_in, sentence in zip(sent_predicts_in,
-                                      story_object.sentences):
-        sent_pred = sentence_model.predict_proba(sent_pred_in)
-        word_preds_in = ml_friendly_words(sentence, question)
-        words = sentence.split()
-        for word_start_pred, word_a in zip(word_preds_in, words):
-            start_pred = word_start_model.predict_proba(word_start_pred)
-            start_index = sentence.index(word_a)
-            for word_end_pred, word_b in zip(word_preds_in, words):
-                end_pred = word_end_model.predict_proba(word_end_pred)
-                end_index = sentence.index(word_b)
-                score = sent_pred * start_pred * end_pred**1 / 3
-                if score > best_score:
-                    best_answer = " ".join(words[start_index:end_index + 1])
-                    best_score = score
-    return best_answer
-
-
-def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
-    """
-    Answers the questions receieved from the questions list with the
-    information saved in the story.
-
-    Parameters
-    ----------
-    story : Story
-        The story object.
-    questions : List[Dict[str,str]]
-        The list of question dictionaries.
-    """
-    for question_dict in questions:
-
-        # Get and print question ID
-        question_id = question_dict["QuestionID"]
-        print(f"QuestionID: {question_id}")
-        # Print the question itself
-        question_text = question_dict["Question"]
-
-        #print(f"Question: {question_text}")
-        # Get question and run it through our answer function with the story
-
-        answer = find_answer(question_text, story)
-        # Print the answer
-        print(f"Answer: {answer}")
-        difficulty = question_dict["Difficulty"]
-        # print(f"Difficulty: {difficulty}")
-        print()
-
-
 def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     """
     Creates a dictionary of n-grams from the beginnings of the questions,
@@ -201,6 +117,7 @@ if __name__ != "__main__":
     # constant-length signature vector
     story_texts = [story_dict['TEXT'] for story_dict, _ in story_qas]
     full_story = Story(" ".join(story_texts))
+    qa = QA()
 
     for line in lines:
         story_id = line.strip()
@@ -215,7 +132,7 @@ if __name__ != "__main__":
             #         n_gram_total[key] += n_gram_dict[key]
             #     else:
             #         n_gram_total[key] = n_gram_dict[key]
-            answer_questions(story_object, questions)
+            qa.answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")

@@ -3,15 +3,9 @@ from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
 import numpy as np
 
-from sklearn.model_selection import (train_test_split, cross_val_predict,
-                                     cross_validate, StratifiedKFold)
+from sklearn.model_selection import train_test_split
 
-from sklearn.feature_selection import (SelectKBest, VarianceThreshold)
-from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
-                                   RobustScaler, StandardScaler,
-                                   PowerTransformer)
-from helpers import (NLP, Story, get_story_question_answers, text_f_score)
-from sklearn.metrics import accuracy_score
+from helpers import (NLP, Story, get_story_question_answers)
 from sentence_scorer import SentenceScorer
 from scipy.spatial import distance
 from tqdm import tqdm
@@ -20,8 +14,6 @@ import time
 import warnings
 from numpy.typing import ArrayLike
 from tpot import TPOTClassifier
-from pprint import pprint
-from pathlib import Path
 from config_dicts import classifier_config_dict_extra_fast as config_to_use
 from functools import lru_cache
 import json
@@ -106,14 +98,14 @@ def get_or_create_all_words() -> List[str]:
 def ml_friendly_sentences(new_story: Story, question: str) -> np.ndarray:
     """
     Get the sentences in a story that are friendly for our machine learning
-    model, so it's ready to go.
+    model.
 
     Parameters
     ----------
     new_story : Story
         The story to get the sentences from.
     question : str
-        The question to get the sentences from.
+        The question being asked for the sentences.
     full_story : Optional[Story], optional
         The full story to get the sentences from, by default None
 
@@ -155,24 +147,33 @@ def ml_friendly_sentences(new_story: Story, question: str) -> np.ndarray:
                           axis=1)
 
 
-def ml_friendly_words(sentence: str, question: str):
+def ml_friendly_words(sentence: str, question: str) -> np.ndarray:
+    """
+    Get the words in a sentence that are friendly for our machine learning
+    model.
+
+    Parameters
+    ----------
+    sentence : str
+        The current sentence from the story.
+    question : str
+        The question being asked for the sentence.
+
+    Returns
+    -------
+    np.ndarray
+
+    """
     X = []
-    start_y = []
-    end_y = []
     words = sentence.split()
     # Get the question vector
     question_vector = get_question_vector(question)
-    for index, word in enumerate(words):
+    for _, word in enumerate(words):
         word_vec = NLP.word_vector(word)
         # Get the input vector
         input_vec = np.concatenate((question_vector, word_vec))
         X.append(input_vec)
-        # Get the start and end labels
-        start_label = 1 if index == start_index else 0
-        end_label = 1 if index == end_index else 0
-        start_y.append(start_label)
-        end_y.append(end_label)
-    return np.array(X), np.array(start_y), np.array(end_y)
+    return np.array(X)
 
 
 @lru_cache(maxsize=None)
@@ -194,15 +195,15 @@ def get_question_vector(question: str) -> np.ndarray:
     first_word = split_words[0]
     second_word = split_words[1] if len(split_words) > 1 else ""
     question_type = [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,  # Who, What, When, Where, Why, How
-        0,
-        0,
-        0,  # much/many/long/old/far, did/does/do, modals
+        0,  # Who
+        0,  # What
+        0,  # When
+        0,  # Where
+        0,  # Why
+        0,  # How
+        0,  # much/many/long/old/far, etc.
+        0,  # did/does/do
+        0,  # modals
     ]
     if first_word == "who":
         question_type[0] = 1
