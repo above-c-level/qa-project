@@ -20,7 +20,6 @@ from sklearn.preprocessing import (MaxAbsScaler, MinMaxScaler, Normalizer,
                                    PolynomialFeatures, PowerTransformer,
                                    RobustScaler, StandardScaler)
 from sklearn.utils import check_array
-from tpot.builtins import StackingEstimator
 
 
 class ValueCount(TransformerMixin):
@@ -153,20 +152,57 @@ class StackAugmenter(BaseEstimator, TransformerMixin):
             (X_transformed, self.estimator.predict(X).reshape(-1, 1)))
 
 
+import numpy as np
+import pandas as pd
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+from sklearn.linear_model import SGDClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline, make_union
+from sklearn.preprocessing import MaxAbsScaler, PowerTransformer, RobustScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.linear_model import RidgeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline, make_union
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.feature_selection import SelectPercentile, f_classif
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+from sklearn.pipeline import make_pipeline, make_union
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.svm import LinearSVC
 
-# Average CV score on the training set was: 0.4422745479321074
-exported_pipeline = make_pipeline(
-    VarianceThreshold(threshold=0.005),
-    StackAugmenter(estimator=RidgeClassifier(alpha=0.65, tol=0.01)),
+# Average CV score on the training set was: 0.7928506104371915
+sentence_model = make_pipeline(
+    StackAugmenter(estimator=GaussianNB(var_smoothing=1e-09)),
+    StandardScaler(),
+    SelectPercentile(score_func=f_classif, percentile=67),
     PolynomialFeatures(degree=2, include_bias=False, interaction_only=True),
-    LinearDiscriminantAnalysis(solver="svd", tol=0.01))
-best_model = exported_pipeline
+    LinearSVC(C=0.01,
+              class_weight="balanced",
+              dual=False,
+              loss="squared_hinge",
+              penalty="l1",
+              tol=0.01),
+)
+
+# Average CV score on the training set was: 0.802253989848753
+end_word_model = make_pipeline(
+    RobustScaler(),
+    StackAugmenter(
+        estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
+    StackAugmenter(estimator=SGDClassifier(alpha=0.01,
+                                           eta0=0.001,
+                                           fit_intercept=True,
+                                           l1_ratio=0.7,
+                                           learning_rate="optimal",
+                                           loss="squared_error",
+                                           penalty="elasticnet",
+                                           power_t=0.1)),
+    MaxAbsScaler(),
+    PowerTransformer(),
+    QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
+)
 # best_model = make_pipeline(
 #     StackingEstimator(estimator=BernoulliNB(alpha=0.01, fit_prior=False)),
 #     PCA(iterated_power=1, svd_solver="randomized"),

@@ -29,10 +29,10 @@ classifier_config_dict = {
     },
 
     # Preprocessors
-    'ml_model.ValueCount': {
+    'ml_models.ValueCount': {
         'value': [0, 1]
     },
-    'ml_model.ValueOverUnder': {
+    'ml_models.ValueOverUnder': {
         'value': np.arange(-1.0, 1.01, 0.05)
     },
     'sklearn.cluster.FeatureAgglomeration': {
@@ -303,10 +303,10 @@ classifier_config_dict_fast = {
     # },
 
     # Preprocessors
-    'ml_model.ValueCount': {
+    'ml_models.ValueCount': {
         'value': [0, 1]
     },
-    'ml_model.ValueOverUnder': {
+    'ml_models.ValueOverUnder': {
         'value': np.arange(-1.0, 1.01, 0.05)
     },
     'sklearn.cluster.FeatureAgglomeration': {
@@ -577,10 +577,10 @@ classifier_config_dict_extra_fast = {
     # },
 
     # Preprocessors
-    'ml_model.ValueCount': {
+    'ml_models.ValueCount': {
         'value': [0, 1]
     },
-    'ml_model.ValueOverUnder': {
+    'ml_models.ValueOverUnder': {
         'value': np.arange(-1.0, 1.01, 0.05)
     },
     'sklearn.cluster.FeatureAgglomeration': {

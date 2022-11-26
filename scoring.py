@@ -6,7 +6,7 @@ from typing import Dict, List, Set, Tuple
 import numpy as np
 import torch
 
-from helpers import (Bert, Story, get_story_question_answers, text_f_score)
+from helpers import (Story, get_story_question_answers, text_f_score)
 from qa import find_answer
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 from tqdm import tqdm
@@ -44,10 +44,6 @@ for story_dict, question_answer_pairs in tqdm(story_qas):
     for question, answer in question_answer_pairs:
         # prediction = get_best_sentence(answer, story_object)
         prediction = find_answer(question, story_object)
-
-        # Most similar BERT embedding, average f score of 0.0621117
-        # Also took 17 minutes to run, so presumably running on CPU
-        # prediction = story_help.most_similar_embedding(bert, question)
 
         # Most similar signature vector, average f score of 0.1869697
         # Took 3 minutes 17 seconds

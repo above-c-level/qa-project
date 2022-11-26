@@ -4,14 +4,26 @@ import os
 import sys
 import re
 import time
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Protocol
 
-from helpers import Bert, read_questions, read_story, Story
+from helpers import (read_questions, read_story, Story,
+                     get_story_question_answers)
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 import numpy as np
 from pprint import pprint
+from ml_approach import ml_friendly_sentences, ml_friendly_words
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 TIMING = False
+
+
+class SKLearnModel(Protocol):
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        ...
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+        ...
 
 
 def parse_args():
@@ -65,7 +77,9 @@ is 20 kilometres away.
     return inputfile
 
 
-def find_answer(question: str, story: Story) -> str:
+def find_answer(question: str, story: Story, sentence_model: SKLearnModel,
+                word_start_model: SKLearnModel,
+                word_end_model: SKLearnModel) -> str:
     """
     Compare the question with the story, and return the best answer.
 
@@ -75,13 +89,37 @@ def find_answer(question: str, story: Story) -> str:
         The current question being asked.
     story : Story
         The saved story.
+    sentence_model : SKLearnModel
+        The model used to predict the sentence.
+    word_start_model : SKLearnModel
+        The model used to predict the start of the answer.
+    word_end_model : SKLearnModel
+        The model used to predict the end of the answer.
 
     Returns
     -------
     str
         The best response to the given question.
     """
-    return story.most_similar_signature(question)
+    sent_predicts_in = ml_friendly_sentences(story, question)
+    best_answer = ""
+    best_score = 0
+    for sent_pred_in, sentence in zip(sent_predicts_in,
+                                      story_object.sentences):
+        sent_pred = sentence_model.predict_proba(sent_pred_in)
+        word_preds_in = ml_friendly_words(sentence, question)
+        words = sentence.split()
+        for word_start_pred, word_a in zip(word_preds_in, words):
+            start_pred = word_start_model.predict_proba(word_start_pred)
+            start_index = sentence.index(word_a)
+            for word_end_pred, word_b in zip(word_preds_in, words):
+                end_pred = word_end_model.predict_proba(word_end_pred)
+                end_index = sentence.index(word_b)
+                score = sent_pred * start_pred * end_pred**1 / 3
+                if score > best_score:
+                    best_answer = " ".join(words[start_index:end_index + 1])
+                    best_score = score
+    return best_answer
 
 
 def answer_questions(story: Story, questions: List[Dict[str, str]]) -> None:
@@ -149,7 +187,7 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     return n_gram_dict
 
 
-if __name__ == "__main__":
+if __name__ != "__main__":
     start = time.time()
     stories = 0
     inputfile = parse_args()
@@ -158,6 +196,12 @@ if __name__ == "__main__":
         directory = lines[0].strip()
         lines = lines[1:]
     n_gram_total = {}
+    story_qas = get_story_question_answers(directory)
+    # Add all words from stories to an input set so we can have a
+    # constant-length signature vector
+    story_texts = [story_dict['TEXT'] for story_dict, _ in story_qas]
+    full_story = Story(" ".join(story_texts))
+
     for line in lines:
         story_id = line.strip()
         try:
@@ -171,7 +215,7 @@ if __name__ == "__main__":
             #         n_gram_total[key] += n_gram_dict[key]
             #     else:
             #         n_gram_total[key] = n_gram_dict[key]
-            # answer_questions(story_object, questions)
+            answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
             sys.stderr.write(f"Could not find story {story_id}")

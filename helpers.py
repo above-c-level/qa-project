@@ -41,59 +41,14 @@ class ModelLoadError(Exception):
         super().__init__(self.message)
 
 
-class Bert:
-    """
-    A helper class to load the BERT model and perform some operations
-    """
-
-    def __init__(self):
-        """
-        Load the BERT model and tokenizer from the HuggingFace library.
-
-        Raises
-        ------
-        ModelLoadError
-            If the model or tokenizer cannot be loaded.
-        """
-        self.device = torch.device(
-            'cuda' if torch.cuda.is_available() else 'cpu')
-        self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-        model = AutoModel.from_pretrained("bert-base-uncased",
-                                          max_position_embeddings=512)
-        if model is not None:
-            self.model = model.to(self.device)
-        else:
-            raise ModelLoadError("Unable to load pretrained BERT model")
-
-    def get_embeddings(self, text: str) -> np.ndarray:
-        """
-        Get the embeddings for the given text.
-
-        Parameters
-        ----------
-        text : str
-            The text to get the embeddings for.
-
-        Returns
-        -------
-        np.ndarray
-            The embeddings for the given text as a numpy array.
-        """
-        encoded_input = self.tokenizer(text, return_tensors='pt')
-        embedding = self.model(**encoded_input.to(self.device)).pooler_output
-        return torch.ravel(embedding).cpu().detach().numpy()
-        # embedding = self.model(**encoded_input).last_hidden_state
-        # return torch.ravel(torch.mean(embedding, dim=1)).detach().numpy()
-
-
 class NLP:
     """
     A helper class to load the NLP model from spacy
     """
     nlp = spacy.load("en_core_web_md")
 
-    @lru_cache(maxsize=1000)
     @staticmethod
+    @lru_cache(maxsize=1000)
     def word_vector(word: str) -> np.ndarray:
         """
         Get the vector representation of a word.
@@ -233,50 +188,6 @@ class Story:
                 best_sentence = story_sentence
         # Return the most similar sentence
         return best_sentence.strip()
-
-    def most_similar_embedding(
-        self,
-        bert: Bert,
-        sentence: str,
-        metric: Optional[Callable[[ArrayLike, ArrayLike],
-                                  float]] = None) -> str:
-        """
-        Finds the sentence in the story most similar to `sentence` in terms of
-        its embedding vector.
-
-        Parameters
-        ----------
-        sentence : str
-            The sentence to compare to the story.
-        metric : Optional[Callable[[ArrayLike, ArrayLike], float]], optional
-            The metric to use to compare the embeddings, by default None. If
-            none is provided, the cosine similarity is used.
-
-        Returns
-        -------
-        str
-            The sentence in the story most similar to `sentence`.
-        """
-        if metric is None:
-            metric = cosine_similarity
-        # Get the vector representation of the sentence
-        sentence_vector = bert.get_embeddings(sentence)
-        # Find the sentence with the highest cosine similarity
-        best_sentence = ""
-        best_similarity = -float("inf")
-        # Look through each sentence in the story
-        for story_sentence in self.sentences:
-            # Vectorize the other sentence
-            story_vector = bert.get_embeddings(story_sentence)
-            # See how similar it is to the sentence passed in
-            similarity = metric(sentence_vector, story_vector)
-            # If it's the most similar so far, save it
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_sentence = story_sentence
-        # Return the most similar sentence
-        return best_sentence.strip()
-
 
 def read_story(directory: str, story_id: str) -> Dict[str, str]:
     """
