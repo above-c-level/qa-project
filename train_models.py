@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument(
         "train_dir",
         type=str,
-        help='The path to the training directory. The training directory ' 
+        help='The path to the training directory. The training directory '
         'should contain .answers, .story, and .questions files.',
         metavar="<train_dir>",
         nargs=1,
@@ -47,7 +47,7 @@ if __name__ == "__main__":
             story_qas, sentence_X, sentence_y = stories
     else:
         print("No stories.pkl found, generating")
-        stories = collect_data()
+        stories = collect_data(train_dir)
         story_qas, sentence_X, sentence_y = stories
         if not os.path.exists("data"):
             os.mkdir("data")
@@ -65,7 +65,8 @@ if __name__ == "__main__":
         word_X, word_start_y, word_end_y = results
         with open("data/word_train.pkl", "wb") as f:
             pickle.dump(results, f)
-    
+    if not os.path.exists("models"):
+        os.mkdir("models")
     print("Training sentence model")
     sentence_model.fit(sentence_X, sentence_y)
     with open("models/sentence_model.pkl", "wb") as f:
@@ -75,7 +76,7 @@ if __name__ == "__main__":
     start_word_model.fit(word_X, word_start_y)
     with open("models/start_word_model.pkl", "wb") as f:
         pickle.dump(start_word_model, f)
-    
+
     print("Training end word model")
     end_word_model.fit(word_X, word_end_y)
     with open("models/end_word_model.pkl", "wb") as f:

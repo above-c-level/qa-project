@@ -13,7 +13,7 @@ import pickle
 import time
 import warnings
 from numpy.typing import ArrayLike
-from tpot import TPOTClassifier
+from tpot import TPOTClassifier, TPOTRegressor
 from config_dicts import classifier_config_dict_extra_fast as config_to_use
 from functools import lru_cache
 import json
@@ -168,7 +168,7 @@ def ml_friendly_words(sentence: str, question: str) -> np.ndarray:
     words = sentence.split()
     # Get the question vector
     question_vector = get_question_vector(question)
-    for _, word in enumerate(words):
+    for word in words:
         word_vec = NLP.word_vector(word)
         # Get the input vector
         input_vec = np.concatenate((question_vector, word_vec))
@@ -270,6 +270,7 @@ def create_word_training_data(
         whether the input data is a start word (or not), followed by a list of
         class labels indicating whether the input data is an end word (or not).
     """
+    discount_rate = 0
     X = []
     start_y = []
     end_y = []
@@ -304,8 +305,20 @@ def create_word_training_data(
             input_vec = np.concatenate((question_vector, word_vec))
             X.append(input_vec)
             # Get the start and end labels
-            start_label = 1 if index == start_index else 0
-            end_label = 1 if index == end_index else 0
+            start_label = 0
+            end_label = 0
+            if index <= start_index:
+                if discount_rate <= 0:
+                    start_label = 1 if start_index == index else 0
+                else:
+                    start_label = discount_rate ** (start_index - index)
+            if index >= end_index:
+                if discount_rate <= 0:
+                    end_label = 1 if end_index == index else 0
+                else:
+                    end_label = discount_rate ** (index - end_index)
+            start_label = 2 * start_label - 1
+            end_label = 2 * end_label - 1
             start_y.append(start_label)
             end_y.append(end_label)
     return np.array(X), np.array(start_y), np.array(end_y)
@@ -391,18 +404,27 @@ def get_distances(questions: ArrayLike, sentences: ArrayLike) -> np.ndarray:
     return np.array(distances)
 
 
-def collect_data() -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]],
-                            np.ndarray, np.ndarray]:
+def collect_data(
+    directory: Optional[str] = None,
+) -> Tuple[List[Tuple[Dict[str, str], List[Tuple[str, str]]]], np.ndarray,
+           np.ndarray]:
     """
     Collects the data from the stories and question-answer pairs, and returns
     them processed into X and y as the input and target output.
+
+    Parameters
+    ----------
+    directory : str
+        The directory to the stories and question-answer pairs.
 
     Returns
     -------
     Tuple[np.ndarray, np.ndarray]
         The input and target output for the model.
     """
-    story_qas = get_story_question_answers('devset-official')
+    if directory is None:
+        directory = "devset-official"
+    story_qas = get_story_question_answers(directory)
 
     # Add all words from stories to an input set so we can have a
     # constant-length signature vector
@@ -495,11 +517,11 @@ if __name__ == "__main__":
     # get probability predictions for each sentence using trained model
     # train word models (start and end) on answers
     # for each sentence:
-        #  get probability predictions for each start/end pair
-        # start_pred, end_pred = sentence.prob(start_index),sentence.prob(end_index)
-        #  start_index, end_index = sentence.index(start_pred), sentence.index(end_pred)
-        # start_index, end_index = sentence.index(start_pred), sentence.index(
-        #     end_pred)
+    #  get probability predictions for each start/end pair
+    # start_pred, end_pred = sentence.prob(start_index),sentence.prob(end_index)
+    #  start_index, end_index = sentence.index(start_pred), sentence.index(end_pred)
+    # start_index, end_index = sentence.index(start_pred), sentence.index(
+    #     end_pred)
     #  if geomean(start_pred, end_pred, sentence_pred) > best_score:
     #    best_score = geomean(start_pred, end_pred, sentence_pred)
     #    best_sentence = sentence
@@ -522,16 +544,28 @@ if __name__ == "__main__":
     #     'colsample_bytree': [0.7, 0.9, 1.0],
     # }
 
-    tpot = TPOTClassifier(
-        generations=20,
-        population_size=50,
-        cv=5,
-        verbosity=3,
-        scoring="balanced_accuracy",
-        periodic_checkpoint_folder='ml_checkpoints',
-        config_dict=config_to_use,
-        max_eval_time_mins=5,
-    )
-    tpot.fit(train_word_start_X, train_word_start_y)
-    print(tpot.score(test_word_start_X, test_word_start_y))
-    tpot.export('tpot_pipeline.py')
+    # tpot = TPOTClassifier(
+    #     generations=20,
+    #     population_size=50,
+    #     cv=5,
+    #     verbosity=3,
+    #     scoring="balanced_accuracy",
+    #     periodic_checkpoint_folder='ml_checkpoints/sentence',
+    #     config_dict=config_to_use
+    #     max_eval_time_mins=5,
+    #     max_time_mins=60*8,
+    # )
+    # tpot = TPOTRegressor(
+    #     generations=10,
+    #     population_size=10,
+    #     cv=5,
+    #     verbosity=3,
+    #     scoring="neg_mean_squared_error",
+    #     periodic_checkpoint_folder='ml_checkpoints/word_end_regression',
+    #     config_dict="TPOT light",
+    #     max_eval_time_mins=1,
+    #     max_time_mins=60,
+    # )
+    # tpot.fit(train_word_end_X, train_word_end_y)
+    # print(tpot.score(test_word_end_X, test_word_end_y))
+    # tpot.export('tpot_pipeline.py')

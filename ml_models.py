@@ -3,16 +3,19 @@ from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import ArrayLike
 from sklearn.base import BaseEstimator, TransformerMixin, is_classifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.discriminant_analysis import (LinearDiscriminantAnalysis,
                                            QuadraticDiscriminantAnalysis)
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_selection import (SelectPercentile, f_classif)
 from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import (MaxAbsScaler, PolynomialFeatures,
                                    PowerTransformer, RobustScaler,
                                    StandardScaler)
+from sklearn.linear_model import LassoLarsCV
 from sklearn.svm import LinearSVC
 from sklearn.utils import check_array
 
@@ -148,52 +151,55 @@ class StackAugmenter(BaseEstimator, TransformerMixin):
 
 
 # Average CV score on the training set was: 0.7928506104371915
-sentence_model = make_pipeline(
-    StackAugmenter(estimator=GaussianNB(var_smoothing=1e-09)),
-    StandardScaler(),
-    SelectPercentile(score_func=f_classif, percentile=67),
-    PolynomialFeatures(degree=2, include_bias=False, interaction_only=True),
-    LinearSVC(C=0.01,
-              class_weight="balanced",
-              dual=False,
-              loss="squared_hinge",
-              penalty="l1",
-              tol=0.01),
-)
+sentence_model = CalibratedClassifierCV(
+    make_pipeline(
+        StackAugmenter(estimator=GaussianNB(var_smoothing=1e-09)),
+        StandardScaler(),
+        SelectPercentile(score_func=f_classif, percentile=67),
+        PolynomialFeatures(degree=2, include_bias=False,
+                           interaction_only=True),
+        LinearSVC(C=0.01,
+                  class_weight="balanced",
+                  dual=False,
+                  loss="squared_hinge",
+                  penalty="l1",
+                  tol=0.01),
+    ))
 
-# Average CV score on the training set was: 0.802253989848753
+# Average CV score on the training set was: 0.8003119429590019
+# end_word_model = CalibratedClassifierCV(
+#     make_pipeline(
+#         RobustScaler(),
+#         StackAugmenter(estimator=PassiveAggressiveClassifier(
+#             C=5.0, loss="hinge", tol=1e-05)),
+#         QuadraticDiscriminantAnalysis(reg_param=0.8, tol=0.0001),
+#     ))
 end_word_model = make_pipeline(
     RobustScaler(),
-    StackAugmenter(
-        estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
-    StackAugmenter(estimator=SGDClassifier(alpha=0.01,
-                                           eta0=0.001,
-                                           fit_intercept=True,
-                                           l1_ratio=0.7,
-                                           learning_rate="optimal",
-                                           loss="squared_error",
-                                           penalty="elasticnet",
-                                           power_t=0.1)),
-    MaxAbsScaler(),
-    PowerTransformer(),
-    QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
+    LassoLarsCV(normalize=False)
 )
 # Average CV score on the training set was: 0.802253989848753
+# start_word_model = CalibratedClassifierCV(
+#     make_pipeline(
+#         RobustScaler(),
+#         StackAugmenter(
+#             estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
+#         StackAugmenter(estimator=SGDClassifier(alpha=0.01,
+#                                                eta0=0.001,
+#                                                fit_intercept=True,
+#                                                l1_ratio=0.7,
+#                                                learning_rate="optimal",
+#                                                loss="squared_error",
+#                                                penalty="elasticnet",
+#                                                power_t=0.1)),
+#         MaxAbsScaler(),
+#         PowerTransformer(),
+#         QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
+#     ))
 start_word_model = make_pipeline(
-    RobustScaler(),
-    StackAugmenter(
-        estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
-    StackAugmenter(estimator=SGDClassifier(alpha=0.01,
-                                           eta0=0.001,
-                                           fit_intercept=True,
-                                           l1_ratio=0.7,
-                                           learning_rate="optimal",
-                                           loss="squared_error",
-                                           penalty="elasticnet",
-                                           power_t=0.1)),
+    ValueCount(0),
     MaxAbsScaler(),
-    PowerTransformer(),
-    QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
+    LassoLarsCV(normalize=False)
 )
 # best_model = make_pipeline(
 #     StackingEstimator(estimator=BernoulliNB(alpha=0.01, fit_prior=False)),

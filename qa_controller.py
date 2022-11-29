@@ -7,13 +7,14 @@ import time
 from typing import Dict, List, Set, Tuple, Protocol
 
 from helpers import (read_questions, read_story, Story,
-                     get_story_question_answers)
+                     get_story_question_answers, cosine_similarity)
 from terminalhelper import NEWLINE, VERBATIM, stringformat
 import numpy as np
 from pprint import pprint
 from ml_approach import ml_friendly_sentences, ml_friendly_words
 from sklearn.base import BaseEstimator, ClassifierMixin
 import pickle
+from sentence_scorer import SentenceScorer
 
 TIMING = False
 
@@ -27,6 +28,31 @@ class SKLearnModel(Protocol):
         ...
 
 
+class Scoreboard:
+    """
+    Keeps track of the top `n` answers and their scores
+    """
+
+    def __init__(self, n: int = 3):
+        self.best_scores = []
+        self.best_answers = []
+        self.n = n
+
+    def add(self, answer: str, score: float) -> None:
+        """
+        Adds an answer and its score to the scoreboard
+        """
+        if len(self.best_scores) < self.n:
+            self.best_scores.append(score)
+            self.best_answers.append(answer)
+        else:
+            min_score = min(self.best_scores)
+            if score > min_score:
+                min_index = self.best_scores.index(min_score)
+                self.best_scores[min_index] = score
+                self.best_answers[min_index] = answer
+
+
 class QA:
     """
     A question answerer class. Acts as a controller to bind together the machine
@@ -37,8 +63,8 @@ class QA:
     def __init__(
         self,
         sentence_model_path="models/sentence_model.pkl",
-        word_start_model_path="models/word_start_model.pkl",
-        word_end_model_path="models/word_end_model.pkl",
+        word_start_model_path="models/start_word_model.pkl",
+        word_end_model_path="models/end_word_model.pkl",
     ):
         if not os.path.exists("models"):
             raise FileNotFoundError(
@@ -79,26 +105,95 @@ class QA:
         str
             The best response to the given question.
         """
-        sent_preds_in = ml_friendly_sentences(story, question)
-        best_answer = ""
+        p = 0.94
+        # sent_preds_in = ml_friendly_sentences(story, question)
+        # best_sentence = ""
+        # best_score = 0
+        # for sent_pred_in, sentence in zip(sent_preds_in, story.sentences):
+        #     reshaped = sent_pred_in.reshape(1, -1)
+        #     try:
+        #         sent_pred_arr = self.sentence_model.predict_proba(reshaped)
+        #     except ValueError:
+        #         # This should be exceedingly rare
+        #         reshaped = np.nan_to_num(reshaped)
+        #         sent_pred_arr = self.sentence_model.predict_proba(reshaped)
+        #     sent_pred = sent_pred_arr[0][1]
+        #     if sent_pred > best_score:
+        #         best_score = sent_pred
+        #         best_sentence = sentence
+        # sentence = best_sentence
+        split = question.lower().split()
+        if split[0] == "who":
+            fun = SentenceScorer.get_who_score
+        elif split[0] == "what":
+            fun = SentenceScorer.get_what_score
+        elif split[0] == "when":
+            fun = SentenceScorer.get_when_score
+        elif split[0] == "where":
+            fun = SentenceScorer.get_where_score
+        elif split[0] == "why":
+            fun = SentenceScorer.get_why_score
+        elif split[0] == "how":
+            fun = SentenceScorer.get_how_score
+        else:
+            fun = SentenceScorer.get_what_score
+        best_sentence = ""
         best_score = 0
-        for sent_pred_in, sentence in zip(sent_preds_in, story.sentences):
-            sent_pred = self.sentence_model.predict_proba(sent_pred_in)
-            word_preds_in = ml_friendly_words(sentence, question)
-            words = sentence.split()
-            for word_start_pred, word_a in zip(word_preds_in, words):
-                start_pred = self.word_start_model.predict_proba(
-                    word_start_pred)
-                start_index = sentence.index(word_a)
-                for word_end_pred, word_b in zip(word_preds_in, words):
-                    end_pred = self.word_end_model.predict_proba(word_end_pred)
-                    end_index = sentence.index(word_b)
-                    score = sent_pred * start_pred * end_pred**1 / 3
-                    if score > best_score:
-                        best_answer = " ".join(words[start_index:end_index +
-                                                     1])
-                        best_score = score
-        return best_answer
+        q_vec = story.get_sentence_vector(question)
+        for sentence in story.sentences:
+            fun_score = fun(question, sentence)
+            s_vec = story.get_sentence_vector(sentence)
+            cos_sim = cosine_similarity(q_vec, s_vec)
+            score = p * cos_sim + (1 - p) * fun_score
+            if score > best_score:
+                best_score = score
+                best_sentence = sentence
+        sentence = best_prediction = best_sentence
+        # start_word_scores = Scoreboard()
+        # word_preds_in = ml_friendly_words(best_sentence, question)
+        # words = best_sentence.split()
+        # for word_start_pred, word_a in zip(word_preds_in, words):
+        #     reshaped = word_start_pred.reshape(1, -1)
+        #     try:
+        #         start_pred_arr = self.word_end_model.predict_proba(reshaped)
+        #         start_pred = start_pred_arr[0][1]
+        #     # Or if predict_proba isn't implemented
+        #     except (ValueError, AttributeError):
+        #         start_pred = self.word_end_model.predict(reshaped)
+
+        #     start_index = words.index(word_a)
+        #     start_word_scores.add(word_a, start_pred)
+        # end_word_scores = Scoreboard()
+        # for word_end_pred, word_b in zip(word_preds_in, words):
+        #     reshaped = word_end_pred.reshape(1, -1)
+        #     try:
+        #         end_pred_arr = self.word_end_model.predict_proba(reshaped)
+        #         end_pred = end_pred_arr[0][1]
+        #     # Or if predict_proba isn't implemented
+        #     except (ValueError, AttributeError):
+        #         end_pred = self.word_end_model.predict(reshaped)
+
+        #     end_index = words.index(word_b)
+        #     end_word_scores.add(word_b, end_pred)
+        # best_prediction = ""
+        # best_score = 0
+        # for start_word, start_score in zip(start_word_scores.best_answers,
+        #                                    start_word_scores.best_scores):
+        #     for end_word, end_score in zip(end_word_scores.best_answers,
+        #                                    end_word_scores.best_scores):
+        #         start_index = words.index(start_word)
+        #         end_index = words.index(end_word)
+        #         score = start_score * end_score
+        #         if start_index < end_index and score > best_score:
+        #             best_prediction = " ".join(words[start_index:end_index +
+        #                                              1])
+        #             best_score = score
+        if len(best_prediction) == 0:
+            best_prediction = best_sentence
+
+        best_prediction = SentenceScorer.filter_answer(question,
+                                                       best_prediction)
+        return best_prediction
 
     def answer_questions(self, story: Story,
                          questions: List[Dict[str, str]]) -> None:
@@ -126,6 +221,7 @@ class QA:
 
             answer = self.find_answer(question_text, story)
             # Print the answer
+            # answer = filter_answer(answer)
             print(f"Answer: {answer}")
             difficulty = question_dict["Difficulty"]
             # print(f"Difficulty: {difficulty}")

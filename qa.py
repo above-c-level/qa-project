@@ -92,9 +92,9 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
     for question_dict in questions:
         question_text = question_dict["Question"].lower()
         words = question_text.split()
-        sliced = words[0:0 + n]
-        if sliced[0] not in {"how"}:
-            continue
+        sliced = words[:0 + n]
+        # if sliced[0] not in {"what"}:
+        #     continue
         n_gram = " ".join(sliced)
         if n_gram in n_gram_dict:
             n_gram_dict[n_gram] += 1
@@ -102,23 +102,111 @@ def n_gram(questions: List[Dict[str, str]], n: int = 2) -> Dict[str, int]:
             n_gram_dict[n_gram] = 1
     return n_gram_dict
 
+def join_n_gram_dicts(
+    dicts: List[Dict[str, int]]
+    ) -> Dict[str, Tuple[int, Dict[str, Tuple[int, ...]]]]:
+    """
+    Takes a list of dictionaries mapping n-grams to counts, and returns a
+    nested dictionary mapping each n-gram to a tuple containing the total
+    number of times that n-gram appears in the dictionaries, and a
+    dictionary mapping each (n+1)-gram to the number of times that it
+    appears in the dictionaries.
 
-if __name__ != "__main__":
+    Parameters
+    ----------
+    dicts : List[Dict[str, int]]
+        A list of dictionaries mapping n-grams to counts.
+
+    Returns
+    -------
+    Dict[str, Tuple[int, Dict[str, Tuple[int, ...]]]]
+        The nested dictionary mapping
+    """
+    filtered_dicts = []
+    for d in dicts:
+        current_dict = {k: v for k, v in d.items() if v > 1}
+        filtered_dicts.append(current_dict)
+
+    n_gram_dict = {}
+    # Construct a tree of n-grams, so for example if we have the 1-gram "what"
+    # showing up 10 times, the 2-gram "what is" showing up 7 times, the
+    # 2-gram "what are" showing up 3 times, and the 3-gram "what is the"
+    # showing up 5 times, the resulting dictionary would be:
+    # {
+    #     "what": (10, {
+    #         "what is": (7, {
+    #             "what is the": (5, {})
+    #         }),
+    #         "what are": (3, {})
+    #     })
+    # }
+    for d in filtered_dicts:
+        for key, value in d.items():
+            words = key.split()
+            if len(words) == 1:
+                n_gram_dict[key] = (value, {})
+            elif len(words) == 2:
+                word_one = words[0]
+                n_gram_dict[word_one][1][key] = (value, {})
+            elif len(words) == 3:
+                word_one = words[0]
+                word_two = f"{words[0]} {words[1]}"
+                n_gram_dict[word_one][1][word_two][1][key] = (value, {})
+            elif len(words) == 4:
+                word_one = words[0]
+                word_two = f"{words[0]} {words[1]}"
+                word_three = f"{words[0]} {words[1]} {words[2]}"
+                n_gram_dict[word_one][1][word_two][1][word_three][1][key] = (value, {})
+            elif len(words) == 5:
+                word_one = words[0]
+                word_two = f"{words[0]} {words[1]}"
+                word_three = f"{words[0]} {words[1]} {words[2]}"
+                word_four = f"{words[0]} {words[1]} {words[2]} {words[3]}"
+                n_gram_dict[word_one][1][word_two][1][word_three][1][word_four][1][key] = (value, {})
+            elif len(words) == 6:
+                word_one = words[0]
+                word_two = f"{words[0]} {words[1]}"
+                word_three = f"{words[0]} {words[1]} {words[2]}"
+                word_four = f"{words[0]} {words[1]} {words[2]} {words[3]}"
+                word_five = f"{words[0]} {words[1]} {words[2]} {words[3]} {words[4]}"
+                n_gram_dict[word_one][1][word_two][1][word_three][1][word_four][1][word_five][1][key] = (value, {})
+    return n_gram_dict
+
+def add_n_grams(questions, current_dict, n):
+    n_gram_dict = n_gram(questions, n=n)
+    for key in n_gram_dict:
+        if key in current_dict:
+            current_dict[key] += n_gram_dict[key]
+        else:
+            current_dict[key] = n_gram_dict[key]
+
+
+if __name__ == "__main__":
     start = time.time()
     stories = 0
     inputfile = parse_args()
+    if TIMING:
+        print("Parsed args")
     with open(inputfile, "r") as f:
         lines = f.readlines()
         directory = lines[0].strip()
         lines = lines[1:]
     n_gram_total = {}
-    story_qas = get_story_question_answers(directory)
+    if TIMING:
+        print("Read input file")
     # Add all words from stories to an input set so we can have a
     # constant-length signature vector
-    story_texts = [story_dict['TEXT'] for story_dict, _ in story_qas]
-    full_story = Story(" ".join(story_texts))
+    if TIMING:
+        print("Collected story question answers")
     qa = QA()
-
+    if TIMING:
+        print("Created QA")
+    # one_grams = {}
+    # two_grams = {}
+    # three_grams = {}
+    # four_grams = {}
+    # five_grams = {}
+    # six_grams = {}
     for line in lines:
         story_id = line.strip()
         try:
@@ -126,12 +214,13 @@ if __name__ != "__main__":
             questions = read_questions(directory, story_id)
             story_object = Story(story_dict)
 
-            # n_gram_dict = n_gram(questions)
-            # for key in n_gram_dict:
-            #     if key in n_gram_total:
-            #         n_gram_total[key] += n_gram_dict[key]
-            #     else:
-            #         n_gram_total[key] = n_gram_dict[key]
+            # add_n_grams(questions, one_grams, 1)
+            # add_n_grams(questions, two_grams, 2)
+            # add_n_grams(questions, three_grams, 3)
+            # add_n_grams(questions, four_grams, 4)
+            # add_n_grams(questions, five_grams, 5)
+            # add_n_grams(questions, six_grams, 6)
+
             qa.answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
@@ -145,7 +234,5 @@ if __name__ != "__main__":
         print(f"Took {time_per_story} seconds on average to answer a story")
         print(f"Took {total_time} seconds to answer {stories} stories")
     # Sort the n-grams by frequency
-    # n_gram_total = sorted(n_gram_total.items(),
-    #                       key=lambda x: x[1],
-    #                       reverse=False)
+    # n_gram_total = join_n_gram_dicts([one_grams, two_grams, three_grams, four_grams])
     # pprint(n_gram_total)

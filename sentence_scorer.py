@@ -238,9 +238,8 @@ class SentenceScorer:
         score += SentenceScorer.word_match(question, sentence)
         location_prep = {
             "in", "at", "on", "by", "above", "under", "beside", "between",
-            "among", "amongst"
-            "near", "inside", "outside", "around", "against", "behind",
-            "across", "into"
+            "among", "amongst", "near", "inside", "outside", "around",
+            "against", "behind", "across", "into"
         }
         s_matched = NLP.nlp(sentence).ents
         if any(word in location_prep for word in sentence.lower().split()):
@@ -282,24 +281,178 @@ class SentenceScorer:
 
         return score
 
-    # @staticmethod
-    # def get_how_score( question: str, sentence: str) -> int:
-    #     """
-    #     Calculates the who score from a sentence based on a question.
+    @staticmethod
+    def get_how_score(question: str, sentence: str) -> int:
+        """
+        Calculates the who score from a sentence based on a question.
 
-    #     Parameters
-    #     ---------
-    #     question: str
-    #         The question
-    #     sentence: str
-    #         The sentence
+        Parameters
+        ---------
+        question: str
+            The question
+        sentence: str
+            The sentence
 
-    #     Returns
-    #     -------
-    #     int
-    #         The resulting score
-    #     """
-    #     return 0
+        Returns
+        -------
+        int
+            The resulting score
+        """
+        q_matched = NLP.nlp(question).ents
+        s_matched = NLP.nlp(sentence).ents
+        score = 0
+        score += SentenceScorer.word_match(question, sentence)
+        lower_q = question.lower().split()
+        lower_s = sentence.lower().split()
+        second_word = lower_q[1]
+        if second_word in {"does", "do"} and "by" in lower_s:
+            score += SentenceScorer.clue
+        if second_word in {
+                "much", "many", "old", "far", "large", "deep", "big", "high",
+                "wide", "young", "short", "tall", "heavy", "light", "small"
+        } and any(token.label_ in
+                  {"PERCENT", "MONEY", "QUANTITY", "ORDINAL", "CARDINAL"}
+                  for token in s_matched):
+            score += SentenceScorer.slam_dunk
+        if second_word == "long" and any(
+                token.label_ in {"DATE", "TIME", "QUANTITY"} for token in s_matched):
+            score += SentenceScorer.confident
+        if second_word == "long" and any(
+                token.label_ in {"CARDINAL"} for token in q_matched):
+            score += SentenceScorer.clue
+        return score
+
+    @staticmethod
+    def filter_answer(question: str, sentence: str) -> str:
+        """
+        Filter out named entities for the answer given a guess for the sentence
+        containing the answer.
+
+        Parameters
+        ----------
+        question : str
+            The best answer question being asked.
+        sentence : str
+            The best answer to the question.
+
+        Returns
+        -------
+        str
+            The best response to the given question.
+        """
+        if not sentence:
+            return sentence
+
+        filtered_answer = ""
+
+        sentence_matched = NLP.nlp(sentence).ents
+        lower_q = question.lower()
+
+        question_split = lower_q.split()
+        first_word = question_split[0]
+        second_word = question_split[1]
+        third_word = question_split[2]
+        lower_s = sentence.lower()
+        sentence_split = lower_s.split()
+
+        if first_word == "who":
+            for token in sentence_matched:
+                if token.label_ == "PERSON":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "ORG":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "GPE":
+                    filtered_answer += token.text + " "
+
+        elif first_word == "what":
+            if "name" in lower_q:
+                for token in sentence_matched:
+                    if token.label_ == "PERSON":
+                        filtered_answer += token.text + " "
+            if "did" == second_word and "the" == third_word:
+                for token in sentence_matched:
+                    if token.text.split()[0] == question_split[3]:
+                        token_index = sentence_split.index(token.text.split()[0])
+                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+
+            elif "is" in lower_q:
+                for token in sentence_matched:
+                    if token.label_ == "ORG":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "DATE":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "LOC":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "TIME":
+                        filtered_answer += token.text + " "
+
+        elif first_word == "when":
+            for token in sentence_matched:
+                if token.label_ == "DATE":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "TIME":
+                    filtered_answer += token.text + " "
+
+        elif first_word == "where":
+            for token in sentence_matched:
+                if token.label_ == "LOC":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "GPE":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "NORP":
+                    filtered_answer += token.text + " "
+                elif token.label_ == "ORG":
+                    filtered_answer += token.text + " "
+
+        elif first_word == "why":
+            if "did" == second_word and "the" == third_word:
+                for token in sentence_matched:
+                    if token.text.split()[0] == question_split[3]:
+                        token_index = sentence_split.index(token.text.split()[0])
+                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+
+        elif first_word == "how":
+            if second_word in {"does", "do"}:
+                for token in sentence_matched:
+                    if token.label_ == "LOC":
+                        filtered_answer += token.text + " "
+
+            if second_word in {
+                    "much", "many", "old", "far", "large", "deep", "big", "high",
+                    "wide", "young", "short", "tall", "heavy", "light", "small"
+            }:
+                for token in sentence_matched:
+                    if token.label_ == "PERCENT":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "MONEY":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "QUANTITY":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "ORDINAL":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "CARDINAL":
+                        filtered_answer += token.text + " "
+
+            elif second_word == "long":
+                for token in sentence_matched:
+                    if token.label_ == "DATE":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "TIME":
+                        filtered_answer += token.text + " "
+                    if token.label_ == "QUANTITY":
+                        filtered_answer += token.text + " "
+
+            if second_word == "did" and third_word == "the":
+                for token in sentence_matched:
+                    if token.text.split()[0] == question_split[3]:
+                        token_index = sentence_split.index(token.text.split()[0])
+                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+
+        filtered_answer = filtered_answer.strip()
+        if len(filtered_answer) == 0:
+            filtered_answer = sentence
+        return filtered_answer
+
 
     @staticmethod
     def get_sentence_scores(story: Story, question: str,
