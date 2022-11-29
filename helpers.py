@@ -1,17 +1,12 @@
 import os
-import random
 import re
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
 import spacy
-import torch
 from numpy.typing import ArrayLike
-from sklearn.model_selection import train_test_split
-from transformers import AutoModel, AutoTokenizer
-from functools import lru_cache
 
 
 def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
@@ -34,36 +29,11 @@ def cosine_similarity(v1: ArrayLike, v2: ArrayLike) -> float:
     return np.dot(v1, v2) / denominator if denominator != 0 else 0
 
 
-class ModelLoadError(Exception):
-
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
-
-
 class NLP:
     """
     A helper class to load the NLP model from spacy
     """
     nlp = spacy.load("en_core_web_md")
-
-    @staticmethod
-    @lru_cache(maxsize=1000)
-    def word_vector(word: str) -> np.ndarray:
-        """
-        Get the vector representation of a word.
-
-        Parameters
-        ----------
-        word : str
-            The word to vectorize.
-
-        Returns
-        -------
-        np.ndarray
-            The vector representation of the word.
-        """
-        return np.array(NLP.nlp(word).vector)
 
 
 class Story:
@@ -147,47 +117,6 @@ class Story:
         # Return the vector
         return word_vector
 
-    def most_similar_signature(
-        self,
-        sentence: str,
-        metric: Optional[Callable[[ArrayLike, ArrayLike],
-                                  float]] = None) -> str:
-        """
-        Finds the sentence in the story most similar to `sentence` in terms of
-        its signature vector.
-
-        Parameters
-        ----------
-        sentence : str
-            The sentence to compare to the story.
-        metric : Optional[Callable[[ArrayLike, ArrayLike], float]], optional
-            The metric to use to compare the signatures, by default None. If
-            none is provided, the cosine similarity is used.
-
-        Returns
-        -------
-        str
-            The sentence in the story most similar to `sentence`.
-        """
-        if metric is None:
-            metric = cosine_similarity
-        # Get the vector representation of the sentence
-        sentence_vector = self.get_sentence_vector(sentence)
-        # Find the sentence with the highest cosine similarity
-        best_sentence = ""
-        best_similarity = -float("inf")
-        # Look through each sentence in the story
-        for story_sentence in self.sentences:
-            # Vectorize the other sentence
-            story_vector = self.get_sentence_vector(story_sentence)
-            # See how similar it is to the sentence passed in
-            similarity = metric(sentence_vector, story_vector)
-            # If it's the most similar so far, save it
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_sentence = story_sentence
-        # Return the most similar sentence
-        return best_sentence.strip()
 
 def read_story(directory: str, story_id: str) -> Dict[str, str]:
     """
@@ -270,145 +199,3 @@ def read_questions(directory: str, story_id: str) -> List[Dict[str, str]]:
         # Add question info to the list
         question_dicts.append(groupdict)
     return question_dicts
-
-
-def read_answers(directory: str, story_id: str) -> List[Dict[str, str]]:
-    """
-    Read an answer file and return a list of dictionaries of key value pairs.
-
-    Parameters
-    ----------
-    directory : str
-        The directory path to the story file.
-    story_id : str
-        The story ID.
-
-    Returns
-    -------
-    List[Dict[str, str]]
-        A list of answers saved in a dictionary of key value pairs.
-    """
-    # Construct the path to the question file
-    file_path = os.path.join(directory, story_id)
-    file_path += ".answers"
-    # Read the file
-    read_data = ""
-    with open(file_path, "r") as f:
-        read_data = f.read()
-
-    questions_re = re.compile(r"QuestionID\:(?:\s+)?(?P<QuestionID>(?:.|\n)*)"
-                              r"Question\:(?:\s+)?(?P<Question>(?:.|\n)*)"
-                              r"Answer\:(?:\s+)?(?P<Answer>(?:.|\n)*)"
-                              r"Difficulty\:(?:\s+)?(?P<Difficulty>(?:.|\n)*)")
-
-    # Questions are separated by double newline
-    question_groups = read_data.split("\n\n")
-    question_dicts = []
-    for group in question_groups:
-        # Match questions as well as the question ID and difficulty
-        group = group.strip()
-        match = questions_re.match(group)
-        if not match:
-            continue
-        groupdict = match.groupdict()
-        for key, value in match.groupdict().items():
-            # Clean up leading and trailing whitespace
-            groupdict[key] = value.strip()
-        # Add question info to the list
-        question_dicts.append(groupdict)
-    return question_dicts
-
-
-def text_f_score(answer: str, prediction: str) -> Tuple[float, float, float]:
-    """
-    Returns the recall, precision, and f measure of a prediction compared
-    with the answer
-
-    Parameters
-    ----------
-    answer : str
-        The ground truth answer(s)
-    prediction : str
-        The predicted answer
-
-    Returns
-    -------
-    Tuple[float, float, float]
-        The recall, precision, and f measure of the prediction, respectively
-    """
-    prediction = prediction.strip()
-    # Unlike predictions, answers can have multiple valid answers
-    # Split the answer into a list of answers about the pipe character (|)
-    answers = [valid.strip() for valid in answer.split("|")]
-    best_recall = -float('inf')
-    best_precision = -float('inf')
-    best_f_score = -float('inf')
-    prediction_words = prediction.split()
-    for valid in answers:
-        # Recall is the number of correct words divided by the number of words
-        # in the answer
-        valid_words = valid.split()
-        # Number of correct words in prediction
-        correct_words = sum(word in valid_words for word in prediction_words)
-        recall = correct_words / len(valid_words) if valid_words else 0
-        # Precision is the number of correct words divided by the number of
-        # words in the prediction
-        precision = correct_words / len(
-            prediction_words) if prediction_words else 0
-        # f measure is the harmonic mean of precision and recall
-        if recall == 0 and precision == 0:
-            f_measure = 0
-        else:
-            f_measure = 2 * (precision * recall) / (precision + recall)
-        if f_measure > best_f_score:
-            best_f_score = f_measure
-        if recall > best_recall:
-            best_recall = recall
-        if precision > best_precision:
-            best_precision = precision
-    # Return the best f measure given the prediction since there can be multiple
-    # valid answers
-    return best_recall, best_precision, best_f_score
-
-
-def get_story_question_answers(
-    directory: str,
-    limit: Optional[int] = None
-) -> List[Tuple[Dict[str, str], List[Tuple[str, str]]]]:
-    """
-    Get the story, question, and answer for each story in a directory.
-
-    Parameters
-    ----------
-    directory : str
-        The directory path to the story files.
-    limit : Optional[int], optional
-        The number of stories to read, by default None. If limit is None, all
-        stories are read.
-
-    Returns
-    -------
-    List[Tuple[Dict[str, str], List[Tuple[str, str]]]]
-        A list of tuples of story, question, and answer.
-    """
-    # First, we need to find all the files in the directory that end with .story
-    files = []
-    for file in os.listdir(directory):
-        if not file.endswith(".story"):
-            continue
-        if limit is not None and len(files) >= limit:
-            break
-        # Strip the file extension
-        file = os.path.splitext(file)[0]
-        files.append(file)
-    story_qas = []
-    for file in files:
-        if limit is not None and len(story_qas) >= limit:
-            break
-        story = read_story(directory, file)
-        answers = read_answers(directory, file)
-        question_answer_pairs = [(group["Question"], group["Answer"])
-                                 for group in answers]
-
-        story_qas.append((story, question_answer_pairs))
-    return story_qas

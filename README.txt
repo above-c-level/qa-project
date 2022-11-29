@@ -15,13 +15,13 @@ for torch, which can be installed with
 is to give the TAs some estimate of how long they will need to wait to see the
 results.)
 
-    An average story takes about 5 second to output.
+    An average story takes about 5 seconds to output.
 
 (c) Please tell us which CADE machine(s) you tested your system on.
- 
+
     Cade machine: LAB1-23
 
 (d) Any known problems or limitations of your system.
 
-    On some of the questions our program can not find a good match in the sentence. This results in the whole sentence being 
+    On some of the questions our program can not find a good match in the sentence. This results in the whole sentence being
     returned as the answer.

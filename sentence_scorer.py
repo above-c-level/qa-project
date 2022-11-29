@@ -31,7 +31,7 @@ class Best:
             }
 
             scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-            # We want to keep the top 10% of sentences
+            # We want to keep the top n% of sentences
             to_keep = {
                 sentence
                 for sentence, _ in
@@ -315,11 +315,12 @@ class SentenceScorer:
                   for token in s_matched):
             score += SentenceScorer.slam_dunk
         if second_word == "long" and any(
-                token.label_ in {"DATE", "TIME", "QUANTITY"} for token in s_matched):
-            score += SentenceScorer.confident
-        if second_word == "long" and any(
-                token.label_ in {"CARDINAL"} for token in q_matched):
-            score += SentenceScorer.clue
+                token.label_ in {"DATE", "TIME", "QUANTITY"}
+                for token in s_matched):
+            score += SentenceScorer.slam_dunk
+        if second_word == "long" and any(token.label_ in {"CARDINAL"}
+                                         for token in q_matched):
+            score += SentenceScorer.good_clue
         return score
 
     @staticmethod
@@ -372,8 +373,10 @@ class SentenceScorer:
             if "did" == second_word and "the" == third_word:
                 for token in sentence_matched:
                     if token.text.split()[0] == question_split[3]:
-                        token_index = sentence_split.index(token.text.split()[0])
-                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+                        token_index = sentence_split.index(
+                            token.text.split()[0])
+                        filtered_answer += (
+                            " ".join(sentence_split[token_index:]) + " ")
 
             elif "is" in lower_q:
                 for token in sentence_matched:
@@ -408,8 +411,10 @@ class SentenceScorer:
             if "did" == second_word and "the" == third_word:
                 for token in sentence_matched:
                     if token.text.split()[0] == question_split[3]:
-                        token_index = sentence_split.index(token.text.split()[0])
-                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+                        token_index = sentence_split.index(
+                            token.text.split()[0])
+                        filtered_answer += (
+                            " ".join(sentence_split[token_index:]) + " ")
 
         elif first_word == "how":
             if second_word in {"does", "do"}:
@@ -418,8 +423,9 @@ class SentenceScorer:
                         filtered_answer += token.text + " "
 
             if second_word in {
-                    "much", "many", "old", "far", "large", "deep", "big", "high",
-                    "wide", "young", "short", "tall", "heavy", "light", "small"
+                    "much", "many", "old", "far", "large", "deep", "big",
+                    "high", "wide", "young", "short", "tall", "heavy", "light",
+                    "small"
             }:
                 for token in sentence_matched:
                     if token.label_ == "PERCENT":
@@ -445,32 +451,12 @@ class SentenceScorer:
             if second_word == "did" and third_word == "the":
                 for token in sentence_matched:
                     if token.text.split()[0] == question_split[3]:
-                        token_index = sentence_split.index(token.text.split()[0])
-                        filtered_answer += (" ".join(sentence_split[token_index:]) + " ")
+                        token_index = sentence_split.index(
+                            token.text.split()[0])
+                        filtered_answer += (
+                            " ".join(sentence_split[token_index:]) + " ")
 
         filtered_answer = filtered_answer.strip()
         if len(filtered_answer) == 0:
             filtered_answer = sentence
         return filtered_answer
-
-
-    @staticmethod
-    def get_sentence_scores(story: Story, question: str,
-                            sentence: str) -> Tuple[int, int, int, int, int]:
-        """
-        Collects the data from the stories and question-answer pairs, and
-        returns them processed into X and y as the input and target output.
-
-        Returns
-        -------
-        Tuple[int, int, int, int, int]
-            The scores for each sentence from
-        """
-        Best.update_story(story, question)
-        who_score = SentenceScorer.get_who_score(question, sentence)
-        what_score = SentenceScorer.get_what_score(question, sentence)
-        when_score = SentenceScorer.get_when_score(question, sentence)
-        where_score = SentenceScorer.get_where_score(question, sentence)
-        why_score = SentenceScorer.get_why_score(question, sentence)
-        #how_score = SentenceScorer.get_how_score(question, sentence)
-        return who_score, what_score, when_score, where_score, why_score
