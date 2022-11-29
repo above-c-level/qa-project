@@ -1,4 +1,4 @@
-C:/Users/Djesso/Programming/Natural Language Processing/Project/test/
+test/
 1999-W07-5
 1999-W08-1
 1999-W08-5

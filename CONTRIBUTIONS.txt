@@ -20,7 +20,14 @@ responsibility for. In most cases, each source code file should be listed for
 just 1 person. But if the code for two distinct functionalities are in the same
 file, then indicate that.
 
+    It's all over the place and we both worked on some portion of every single
+    file, but largely:
+
     helpers.py -> Jesse
     qa.py -> Sephora
-    sentence_score -> Sephora 
-    qa_controller -> Jesse
+    sentence_scorer.py -> Sephora
+    qa_controller.py -> Jesse
+
+    (terminalhelper.py was written by Jesse for a previous assignment and
+    doesn't add any actual functionality to the qa system, but makes the help
+    message a bit more pretty-fied)

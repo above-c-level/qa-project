@@ -1,7 +1,6 @@
-from typing import Dict, List, Protocol
+from typing import Dict, List
 
 from helpers import (Story, cosine_similarity)
-import numpy as np
 from sentence_scorer import SentenceScorer, Best
 
 TIMING = False
@@ -92,7 +91,7 @@ class QA:
             # Print the question itself
             question_text = question_dict["Question"]
 
-            #print(f"Question: {question_text}")
+            # print(f"Question: {question_text}")
             # Get question and run it through our answer function with the story
 
             answer = self.find_answer(question_text, story)

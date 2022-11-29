@@ -18,7 +18,7 @@ class Best:
     @staticmethod
     def update_story(story: Story,
                      question: str,
-                     percentage_to_keep: float = 0.25):
+                     percentage_to_keep: float = 0.5):
         if story == Best.current_story and question == Best.question:
             return
         if question != Best.question:
@@ -377,7 +377,6 @@ class SentenceScorer:
                             token.text.split()[0])
                         filtered_answer += (
                             " ".join(sentence_split[token_index:]) + " ")
-
             elif "is" in lower_q:
                 for token in sentence_matched:
                     if token.label_ == "ORG":

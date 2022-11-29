@@ -33,7 +33,7 @@ class NLP:
     """
     A helper class to load the NLP model from spacy
     """
-    nlp = spacy.load("en_core_web_md")
+    nlp = spacy.load("en_core_web_lg")
 
 
 class Story:
