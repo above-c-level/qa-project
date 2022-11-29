@@ -501,71 +501,8 @@ if __name__ == "__main__":
      test_word_start_y) = train_test_split(word_X, word_start_y, test_size=0.2)
     (train_word_end_X, test_word_end_X, train_word_end_y,
      test_word_end_y) = train_test_split(word_X, word_end_y, test_size=0.2)
-    # n_fits = fit_n_models(100, X, y, 60 * 5, checkpoint_folder="random_ml")
-    # Sort n_fits by test score
-    # pprint(n_fits.sort(key=lambda x: x[0], reverse=True))
-
-    # print(f"Training set size: {len(train_x)}")
-    # print(f"Test set size: {len(test_x)}")
-    # all_results = {}
-    # results = []
     start = time.time()
 
     print("Fitting pipeline")
 
-    # train sentence model on sentences
-    # get probability predictions for each sentence using trained model
-    # train word models (start and end) on answers
-    # for each sentence:
-    #  get probability predictions for each start/end pair
-    # start_pred, end_pred = sentence.prob(start_index),sentence.prob(end_index)
-    #  start_index, end_index = sentence.index(start_pred), sentence.index(end_pred)
-    # start_index, end_index = sentence.index(start_pred), sentence.index(
-    #     end_pred)
-    #  if geomean(start_pred, end_pred, sentence_pred) > best_score:
-    #    best_score = geomean(start_pred, end_pred, sentence_pred)
-    #    best_sentence = sentence
-    # return best_sentence
-
     end = time.time()
-
-    # classifier_config_dict['lightgbm.LGBMClassifier'] = {
-    #     'boosting_type': ['gbdt', 'dart', 'rf'],
-    #     'num_leaves': [
-    #         2, 4, 7, 10, 15, 20, 25, 30, 35, 40, 50, 65, 80, 100, 125, 150,
-    #         200, 250, 500
-    #     ],
-    #     'learning_rate': [0.01, 0.05, 0.1],
-    #     'n_estimators':
-    #     [5, 20, 35, 50, 75, 100, 150, 200, 350, 500, 750, 1000, 1500, 2000],
-    #     'min_child_samples':
-    #     [1, 5, 7, 10, 15, 20, 35, 50, 100, 200, 500, 1000],
-    #     'subsample': [0.66, 0.7, 0.8, 0.9, 1.0],
-    #     'colsample_bytree': [0.7, 0.9, 1.0],
-    # }
-
-    # tpot = TPOTClassifier(
-    #     generations=20,
-    #     population_size=50,
-    #     cv=5,
-    #     verbosity=3,
-    #     scoring="balanced_accuracy",
-    #     periodic_checkpoint_folder='ml_checkpoints/sentence',
-    #     config_dict=config_to_use
-    #     max_eval_time_mins=5,
-    #     max_time_mins=60*8,
-    # )
-    # tpot = TPOTRegressor(
-    #     generations=10,
-    #     population_size=10,
-    #     cv=5,
-    #     verbosity=3,
-    #     scoring="neg_mean_squared_error",
-    #     periodic_checkpoint_folder='ml_checkpoints/word_end_regression',
-    #     config_dict="TPOT light",
-    #     max_eval_time_mins=1,
-    #     max_time_mins=60,
-    # )
-    # tpot.fit(train_word_end_X, train_word_end_y)
-    # print(tpot.score(test_word_end_X, test_word_end_y))
-    # tpot.export('tpot_pipeline.py')

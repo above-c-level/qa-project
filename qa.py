@@ -214,13 +214,6 @@ if __name__ == "__main__":
             questions = read_questions(directory, story_id)
             story_object = Story(story_dict)
 
-            # add_n_grams(questions, one_grams, 1)
-            # add_n_grams(questions, two_grams, 2)
-            # add_n_grams(questions, three_grams, 3)
-            # add_n_grams(questions, four_grams, 4)
-            # add_n_grams(questions, five_grams, 5)
-            # add_n_grams(questions, six_grams, 6)
-
             qa.answer_questions(story_object, questions)
             stories += 1
         except FileNotFoundError:
@@ -233,6 +226,3 @@ if __name__ == "__main__":
         time_per_story = total_time / stories
         print(f"Took {time_per_story} seconds on average to answer a story")
         print(f"Took {total_time} seconds to answer {stories} stories")
-    # Sort the n-grams by frequency
-    # n_gram_total = join_n_gram_dicts([one_grams, two_grams, three_grams, four_grams])
-    # pprint(n_gram_total)

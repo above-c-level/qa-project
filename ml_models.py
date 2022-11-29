@@ -166,57 +166,12 @@ sentence_model = CalibratedClassifierCV(
                   tol=0.01),
     ))
 
-# Average CV score on the training set was: 0.8003119429590019
-# end_word_model = CalibratedClassifierCV(
-#     make_pipeline(
-#         RobustScaler(),
-#         StackAugmenter(estimator=PassiveAggressiveClassifier(
-#             C=5.0, loss="hinge", tol=1e-05)),
-#         QuadraticDiscriminantAnalysis(reg_param=0.8, tol=0.0001),
-#     ))
 end_word_model = make_pipeline(
     RobustScaler(),
     LassoLarsCV(normalize=False)
 )
-# Average CV score on the training set was: 0.802253989848753
-# start_word_model = CalibratedClassifierCV(
-#     make_pipeline(
-#         RobustScaler(),
-#         StackAugmenter(
-#             estimator=LinearDiscriminantAnalysis(solver="lsqr", tol=0.1)),
-#         StackAugmenter(estimator=SGDClassifier(alpha=0.01,
-#                                                eta0=0.001,
-#                                                fit_intercept=True,
-#                                                l1_ratio=0.7,
-#                                                learning_rate="optimal",
-#                                                loss="squared_error",
-#                                                penalty="elasticnet",
-#                                                power_t=0.1)),
-#         MaxAbsScaler(),
-#         PowerTransformer(),
-#         QuadraticDiscriminantAnalysis(reg_param=0.55, tol=1e-05),
-#     ))
 start_word_model = make_pipeline(
     ValueCount(0),
     MaxAbsScaler(),
     LassoLarsCV(normalize=False)
 )
-# best_model = make_pipeline(
-#     StackingEstimator(estimator=BernoulliNB(alpha=0.01, fit_prior=False)),
-#     PCA(iterated_power=1, svd_solver="randomized"),
-#     RobustScaler(),
-#     LogisticRegression(C=5.0, dual=False, penalty="l2")
-# )
-
-# from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-# from sklearn.feature_selection import SelectPercentile, f_classif
-# from sklearn.model_selection import train_test_split
-# from sklearn.pipeline import make_pipeline
-# from sklearn.preprocessing import PolynomialFeatures
-
-# # Average CV score on the training set was: 0.39228978827510036
-# exported_pipeline = make_pipeline(
-#     PolynomialFeatures(degree=2, include_bias=False, interaction_only=False),
-#     SelectPercentile(score_func=f_classif, percentile=66),
-#     LinearDiscriminantAnalysis(solver="lsqr", tol=0.001)
-# )

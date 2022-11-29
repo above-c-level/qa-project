@@ -106,22 +106,6 @@ class QA:
             The best response to the given question.
         """
         p = 0.94
-        # sent_preds_in = ml_friendly_sentences(story, question)
-        # best_sentence = ""
-        # best_score = 0
-        # for sent_pred_in, sentence in zip(sent_preds_in, story.sentences):
-        #     reshaped = sent_pred_in.reshape(1, -1)
-        #     try:
-        #         sent_pred_arr = self.sentence_model.predict_proba(reshaped)
-        #     except ValueError:
-        #         # This should be exceedingly rare
-        #         reshaped = np.nan_to_num(reshaped)
-        #         sent_pred_arr = self.sentence_model.predict_proba(reshaped)
-        #     sent_pred = sent_pred_arr[0][1]
-        #     if sent_pred > best_score:
-        #         best_score = sent_pred
-        #         best_sentence = sentence
-        # sentence = best_sentence
         split = question.lower().split()
         if split[0] == "who":
             fun = SentenceScorer.get_who_score
@@ -137,6 +121,7 @@ class QA:
             fun = SentenceScorer.get_how_score
         else:
             fun = SentenceScorer.get_what_score
+            
         best_sentence = ""
         best_score = 0
         q_vec = story.get_sentence_vector(question)
@@ -149,45 +134,6 @@ class QA:
                 best_score = score
                 best_sentence = sentence
         sentence = best_prediction = best_sentence
-        # start_word_scores = Scoreboard()
-        # word_preds_in = ml_friendly_words(best_sentence, question)
-        # words = best_sentence.split()
-        # for word_start_pred, word_a in zip(word_preds_in, words):
-        #     reshaped = word_start_pred.reshape(1, -1)
-        #     try:
-        #         start_pred_arr = self.word_end_model.predict_proba(reshaped)
-        #         start_pred = start_pred_arr[0][1]
-        #     # Or if predict_proba isn't implemented
-        #     except (ValueError, AttributeError):
-        #         start_pred = self.word_end_model.predict(reshaped)
-
-        #     start_index = words.index(word_a)
-        #     start_word_scores.add(word_a, start_pred)
-        # end_word_scores = Scoreboard()
-        # for word_end_pred, word_b in zip(word_preds_in, words):
-        #     reshaped = word_end_pred.reshape(1, -1)
-        #     try:
-        #         end_pred_arr = self.word_end_model.predict_proba(reshaped)
-        #         end_pred = end_pred_arr[0][1]
-        #     # Or if predict_proba isn't implemented
-        #     except (ValueError, AttributeError):
-        #         end_pred = self.word_end_model.predict(reshaped)
-
-        #     end_index = words.index(word_b)
-        #     end_word_scores.add(word_b, end_pred)
-        # best_prediction = ""
-        # best_score = 0
-        # for start_word, start_score in zip(start_word_scores.best_answers,
-        #                                    start_word_scores.best_scores):
-        #     for end_word, end_score in zip(end_word_scores.best_answers,
-        #                                    end_word_scores.best_scores):
-        #         start_index = words.index(start_word)
-        #         end_index = words.index(end_word)
-        #         score = start_score * end_score
-        #         if start_index < end_index and score > best_score:
-        #             best_prediction = " ".join(words[start_index:end_index +
-        #                                              1])
-        #             best_score = score
         if len(best_prediction) == 0:
             best_prediction = best_sentence
 
