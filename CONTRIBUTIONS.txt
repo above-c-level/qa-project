@@ -22,3 +22,5 @@ file, then indicate that.
 
     helpers.py -> Jesse
     qa.py -> Sephora
+    sentence_score -> Sephora 
+    qa_controller -> Jesse
